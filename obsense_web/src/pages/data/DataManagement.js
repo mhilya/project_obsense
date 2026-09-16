@@ -165,9 +165,9 @@ export const DataManagement = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
+      <div className="flex overflow-x-auto whitespace-nowrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-800 scrollbar-none">
         <button
-          className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition ${
+          className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition shrink-0 ${
             activeTab === 'daily'
               ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
@@ -178,7 +178,7 @@ export const DataManagement = () => {
           <span>Log Harian ({logs.length} Input)</span>
         </button>
         <button
-          className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition ${
+          className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition shrink-0 ${
             activeTab === 'cycles'
               ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
@@ -193,12 +193,12 @@ export const DataManagement = () => {
       {/* TAB 1: LOG HARIAN */}
       {activeTab === 'daily' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">Log Harian FFQ Seluruh Pasien</h3>
             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <span>Filter Siklus:</span>
+              <span className="shrink-0">Filter Siklus:</span>
               <select
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="w-full sm:w-auto rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 value={selectedCycleId}
                 onChange={(e) => setSelectedCycleId(e.target.value)}
               >

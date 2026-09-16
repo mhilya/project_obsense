@@ -11,10 +11,12 @@ import {
   FileText,
   ShieldCheck,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  X,
+  Activity
 } from 'lucide-react';
 
-export const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
+export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMobile }) => {
   const { isSuperAdmin } = useAuth();
 
   const menuGroups = [
@@ -49,14 +51,44 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
     }
   ];
 
+  const handleLinkClick = () => {
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
+
   return (
     <aside
-      className={`fixed top-16 left-0 bottom-0 z-20 flex flex-col justify-between border-r border-slate-200 bg-slate-900 text-slate-300 transition-all duration-300 ease-in-out dark:border-slate-800 ${
-        isCollapsed ? 'w-18 items-center' : 'w-64'
+      className={`fixed top-0 md:top-16 left-0 bottom-0 z-50 md:z-20 flex flex-col justify-between border-r border-slate-800 bg-slate-900 text-slate-300 transition-all duration-300 ease-in-out dark:border-slate-800 ${
+        // Mobile behavior: off-canvas drawer
+        isMobileOpen ? 'translate-x-0 w-72 max-w-[85vw] shadow-2xl' : '-translate-x-full md:translate-x-0'
+      } ${
+        // Desktop behavior: collapsed or expanded width
+        isCollapsed ? 'md:w-18 md:items-center' : 'md:w-64'
       }`}
     >
-      {/* Top Collapse Button */}
-      <div className="flex items-center justify-end px-3 pt-3">
+      {/* Mobile Drawer Header with Logo & Close Button */}
+      <div className="flex md:hidden items-center justify-between px-4 py-4 border-b border-slate-800 bg-slate-950/60">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
+            <Activity size={18} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-extrabold tracking-tight text-white leading-tight">OBSENSE</span>
+            <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">Clinical Admin</span>
+          </div>
+        </div>
+        <button
+          onClick={onCloseMobile}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-400 hover:text-white"
+          title="Tutup Menu"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      {/* Desktop Top Collapse Button */}
+      <div className="hidden md:flex items-center justify-end px-3 pt-3">
         <button
           className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-white transition"
           onClick={onToggleCollapse}
@@ -67,10 +99,10 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
       </div>
 
       {/* Nav Menu */}
-      <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-5">
+      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
         {menuGroups.map((group, gIdx) => (
           <div key={gIdx} className="space-y-1">
-            {!isCollapsed && (
+            {(!isCollapsed || isMobileOpen) && (
               <span className="block px-3 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
                 {group.group}
               </span>
@@ -83,24 +115,25 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
                 <NavLink
                   key={item.path}
                   to={item.path}
+                  onClick={handleLinkClick}
                   className={({ isActive }) =>
-                    `group flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                    `group flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${
                       isActive
-                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
+                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30 font-bold'
                         : isLocked
                         ? 'text-slate-500 opacity-60 hover:bg-slate-800/40 cursor-not-allowed'
                         : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
-                    } ${isCollapsed ? 'justify-center px-0' : ''}`
+                    } ${isCollapsed && !isMobileOpen ? 'md:justify-center md:px-0' : ''}`
                   }
-                  title={isCollapsed ? item.name : ''}
+                  title={isCollapsed && !isMobileOpen ? item.name : ''}
                 >
                   <Icon size={18} className="shrink-0" />
-                  {!isCollapsed && (
-                    <div className="flex flex-1 items-center justify-between">
+                  {(!isCollapsed || isMobileOpen) && (
+                    <div className="flex flex-1 items-center justify-between min-w-0">
                       <span className="truncate">{item.name}</span>
                       {item.badge && (
                         <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${
                             item.superAdminOnly
                               ? isSuperAdmin
                                 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
@@ -121,7 +154,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
       </nav>
 
       {/* Sidebar Footer System Status */}
-      {!isCollapsed && (
+      {(!isCollapsed || isMobileOpen) && (
         <div className="border-t border-slate-800/80 p-3 m-3 rounded-xl bg-slate-950/40 border">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>

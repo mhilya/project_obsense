@@ -99,8 +99,8 @@ export const DataTable = ({
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-800 dark:bg-slate-900 transition-colors">
       {/* Controls: Search, Filter, Page Size */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4 dark:border-slate-800">
-        <div className="relative flex flex-1 min-w-[240px] max-w-sm items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 p-3.5 sm:p-4 dark:border-slate-800">
+        <div className="relative flex w-full sm:w-auto flex-1 min-w-0 max-w-none sm:max-w-sm items-center">
           <Search size={15} className="absolute left-3 text-slate-400 pointer-events-none" />
           <input
             type="text"
@@ -125,12 +125,12 @@ export const DataTable = ({
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 sm:gap-3">
           {filterOptions && (
-            <div className="relative flex items-center">
+            <div className="relative flex items-center flex-1 sm:flex-none min-w-[140px]">
               <SlidersHorizontal size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
               <select
-                className="rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-6 py-2 text-xs font-medium text-slate-700 outline-none transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-6 py-2 text-xs font-medium text-slate-700 outline-none transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer truncate"
                 value={selectedFilter}
                 onChange={(e) => {
                   setSelectedFilter(e.target.value);
@@ -147,10 +147,10 @@ export const DataTable = ({
             </div>
           )}
 
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
             <span>Tampil:</span>
             <select
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-medium text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
@@ -242,8 +242,8 @@ export const DataTable = ({
       </div>
 
       {/* Pagination Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 p-4 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-        <div>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100 p-3.5 sm:p-4 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        <div className="text-center sm:text-left">
           Menampilkan <strong className="text-slate-800 dark:text-slate-200">{totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1}</strong> sampai{' '}
           <strong className="text-slate-800 dark:text-slate-200">{Math.min(currentPage * pageSize, totalItems)}</strong> dari{' '}
           <strong className="text-slate-800 dark:text-slate-200">{totalItems}</strong> data
@@ -258,7 +258,7 @@ export const DataTable = ({
           >
             <ChevronLeft size={15} />
           </button>
-          <span className="px-2 font-semibold text-slate-700 dark:text-slate-200">
+          <span className="px-2 font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
             Hal {currentPage} / {totalPages}
           </span>
           <button
