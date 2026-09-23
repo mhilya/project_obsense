@@ -1,10 +1,3 @@
--- ==========================================================
--- OBSENSE (Obesity Sensing & Clinical Decision Support System)
--- Production MySQL Database Schema DDL
--- Requirements: 8 Core Tables, Foreign Keys, Indexing,
--- Soft Deletes (`deleted_at`), JSON Fields, Timestamps
--- ==========================================================
-
 CREATE DATABASE IF NOT EXISTS `obsense_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `obsense_db`;
 
@@ -156,8 +149,10 @@ CREATE TABLE IF NOT EXISTS `system_configurations` (
 CREATE TABLE IF NOT EXISTS `audit_logs` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `admin_id` INT NULL,
+  `admin_name` VARCHAR(150) NULL,
+  `admin_email` VARCHAR(150) NULL,
   `action` VARCHAR(100) NOT NULL COMMENT 'LOGIN, CREATE_USER, UPDATE_USER, DELETE_USER, EVALUATE, UPDATE_CONFIG, EXPORT_DATA',
-  `entity_type` VARCHAR(50) NOT NULL COMMENT 'User, DailyLog, Assessment, Config, Admin',
+  `entity_type` VARCHAR(50) NOT NULL COMMENT 'User, DailyLog, Assessment, Config, Admin, Security',
   `entity_id` VARCHAR(50) NULL,
   `details` JSON NULL COMMENT 'Before & after state snapshot: {"before": {...}, "after": {...}}',
   `ip_address` VARCHAR(45) NULL,
@@ -177,7 +172,7 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
 -- Password hash simulasi bcrypt untuk: 'admin123'
 INSERT INTO `admins` (`name`, `email`, `password`, `role`, `is_active`) VALUES
 ('Super Administrator', 'superadmin@obsense.com', '$2a$10$eB8a1gG9M73d1fA.H8Fh7.nO72r2oQ3m5W4K6u9x/Y6Z1a2b3c4d5', 'super_admin', TRUE),
-('Dokter Spesialis Gizi (Admin)', 'admin@obsense.com', '$2a$10$eB8a1gG9M73d1fA.H8Fh7.nO72r2oQ3m5W4K6u9x/Y6Z1a2b3c4d5', 'admin', TRUE)
+('Admin', 'admin@obsense.com', '$2a$10$eB8a1gG9M73d1fA.H8Fh7.nO72r2oQ3m5W4K6u9x/Y6Z1a2b3c4d5', 'admin', TRUE)
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
 -- Seed Default System Configurations (WHO/AHA/FAO & Variable Mapping)

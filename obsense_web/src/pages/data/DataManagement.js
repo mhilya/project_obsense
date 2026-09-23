@@ -1,68 +1,75 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '../../components/common/DataTable';
-import storageService from '../../mock/storageService';
+import cycleService from '../../services/cycleService';
 import { useNotification } from '../../context/NotificationContext';
-import useAuth from '../../hooks/useAuth';
 import {
   Database,
   FileSpreadsheet,
   Edit2,
-  Trash2,
   Layers,
   X,
-  Save
+  Save,
+  Loader2
 } from 'lucide-react';
 
 export const DataManagement = () => {
-  const { user: currentAdmin } = useAuth();
-  const { showSuccess, showError, confirm } = useNotification();
+  const { showSuccess, showError } = useNotification();
 
   const [logs, setLogs] = useState([]);
   const [cycles, setCycles] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'cycles'
   const [selectedCycleId, setSelectedCycleId] = useState('');
   const [editingLog, setEditingLog] = useState(null);
 
-  const loadData = () => {
-    setLogs(storageService.getDailyLogs());
-    setCycles(storageService.getCycles());
-  };
+  const loadData = useCallback(async () => {
+    try {
+      const [logsData, cyclesData] = await Promise.all([
+        cycleService.getDailyLogs(),
+        cycleService.getCycles()
+      ]);
+      setLogs(logsData || []);
+      setCycles(cyclesData || []);
+    } catch (err) {
+      showError('Gagal memuat data log harian dan siklus dari database.');
+    }
+  }, [showError]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const handleExportCSV = () => {
-    storageService.exportToCSV(logs, `obsense_daily_logs_${Date.now()}.csv`);
+    if (!logs.length) return;
+    const headers = ['ID', 'Siklus ID', 'Pasien', 'Tanggal', 'Hari Ke', 'FAF', 'TUE', 'FCVC', 'FAVC', 'Air(L)', 'Catatan'];
+    const rows = logs.map(l => [
+      l.id, l.cycle_id, `"${l.userName || ''}"`, l.log_date, l.day_number, l.faf, l.tue, l.fcvc, l.favc ? 'Ya' : 'Tidak', l.ch2o, `"${l.notes || ''}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `obsense_daily_logs_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     showSuccess('Data log harian berhasil diexport ke file CSV!');
   };
 
-  const handleDeleteLog = async (log) => {
-    const ok = await confirm({
-      title: 'Hapus Input Log Harian',
-      message: `Hapus input log hari ke-${log.day_number} (${log.log_date}) untuk ${log.userName}?`,
-      confirmText: 'Hapus Log',
-      danger: true
-    });
-
-    if (ok) {
-      storageService.deleteDailyLog(log.id, currentAdmin?.name);
-      showSuccess('Log harian berhasil dihapus.');
-      loadData();
-    }
-  };
-
-  const handleSaveEditLog = (e) => {
+  const handleSaveEditLog = async (e) => {
     e.preventDefault();
     if (!editingLog) return;
 
+    setSubmitting(true);
     try {
-      storageService.updateDailyLog(editingLog.id, editingLog, currentAdmin?.name);
-      showSuccess(`Log H-${editingLog.day_number} untuk ${editingLog.userName} berhasil diperbarui!`);
+      await cycleService.createDailyLog(editingLog);
+      showSuccess(`Log H-${editingLog.day_number} untuk ${editingLog.userName} berhasil diperbarui di database!`);
       setEditingLog(null);
       loadData();
     } catch (err) {
-      showError('Gagal memperbarui log: ' + err.message);
+      showError('Gagal memperbarui log: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -120,7 +127,7 @@ export const DataManagement = () => {
       key: 'favc',
       render: (val) => (
         <span
-          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+          className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
             val
               ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'
               : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
@@ -150,7 +157,7 @@ export const DataManagement = () => {
             Manajemen Data & Agregasi 14-Hari
           </h1>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Pusat pemantauan data kuesioner harian FFQ, agregasi statistik per siklus, dan koreksi data masukan.
+            Pusat pemantauan data kuesioner harian FFQ, agregasi statistik per siklus, dan koreksi data masukan di database MySQL.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -227,13 +234,6 @@ export const DataManagement = () => {
                 >
                   <Edit2 size={13} />
                 </button>
-                <button
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 transition hover:bg-rose-100 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-400"
-                  title="Hapus Data Input Ini"
-                  onClick={() => handleDeleteLog(row)}
-                >
-                  <Trash2 size={13} />
-                </button>
               </div>
             )}
           />
@@ -281,25 +281,25 @@ export const DataManagement = () => {
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center dark:border-slate-800 dark:bg-slate-800/40">
                       <span className="block text-[10px] text-slate-400">Rata-rata FAF</span>
                       <strong className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {cycle.aggregated_features?.faf_mean}
+                        {cycle.aggregated_features?.faf_mean ?? '-'}
                       </strong>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center dark:border-slate-800 dark:bg-slate-800/40">
                       <span className="block text-[10px] text-slate-400">Rata-rata TUE</span>
                       <strong className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {cycle.aggregated_features?.tue_mean}
+                        {cycle.aggregated_features?.tue_mean ?? '-'}
                       </strong>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center dark:border-slate-800 dark:bg-slate-800/40">
                       <span className="block text-[10px] text-slate-400">Modus FCVC</span>
                       <strong className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Skala {cycle.aggregated_features?.fcvc_mode}
+                        Skala {cycle.aggregated_features?.fcvc_mode ?? '-'}
                       </strong>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center dark:border-slate-800 dark:bg-slate-800/40">
                       <span className="block text-[10px] text-slate-400">Rasio FAVC (Fastfood)</span>
                       <strong className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {((cycle.aggregated_features?.favc_ratio || 0) * 100).toFixed(0)}%
+                        {cycle.aggregated_features?.favc_ratio !== undefined ? `${((cycle.aggregated_features?.favc_ratio || 0) * 100).toFixed(0)}%` : '-'}
                       </strong>
                     </div>
                   </div>
@@ -433,14 +433,16 @@ export const DataManagement = () => {
                   type="button"
                   className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   onClick={() => setEditingLog(null)}
+                  disabled={submitting}
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-500"
+                  disabled={submitting}
+                  className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-500 disabled:opacity-50"
                 >
-                  <Save size={15} />
+                  {submitting ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
                   <span>Simpan Perubahan</span>
                 </button>
               </div>
@@ -453,4 +455,3 @@ export const DataManagement = () => {
 };
 
 export default DataManagement;
-

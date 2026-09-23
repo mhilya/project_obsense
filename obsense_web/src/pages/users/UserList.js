@@ -2,21 +2,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '../../components/common/DataTable';
 import UserDetailModal from './UserDetailModal';
 import UserEditModal from './UserEditModal';
-import storageService from '../../mock/storageService';
+import userService from '../../services/userService';
 import { OBESITY_CLASSES } from '../../mock/mockData';
 import { useNotification } from '../../context/NotificationContext';
-import useAuth from '../../hooks/useAuth';
 import {
   Eye,
   Edit2,
   Trash2,
   Power,
-  FileSpreadsheet
+  FileSpreadsheet,
+  RotateCcw
 } from 'lucide-react';
 
 export const UserList = () => {
-  const { user: currentAdmin } = useAuth();
-  const { showSuccess, confirm } = useNotification();
+  const { showSuccess, showError, confirm } = useNotification();
 
   const [users, setUsers] = useState([]);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -24,10 +23,14 @@ export const UserList = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
 
-  const loadUsers = useCallback(() => {
-    const list = storageService.getUsers(showDeleted);
-    setUsers([...list]);
-  }, [showDeleted]);
+  const loadUsers = useCallback(async () => {
+    try {
+      const data = await userService.getUsers({ includeDeleted: showDeleted });
+      setUsers(data || []);
+    } catch (err) {
+      showError('Gagal memuat data pengguna dari server.');
+    }
+  }, [showDeleted, showError]);
 
   useEffect(() => {
     loadUsers();
@@ -45,38 +48,77 @@ export const UserList = () => {
   };
 
   const handleToggleStatus = async (user) => {
-    const nextStatus = user.status === 'active' ? 'Non-aktif' : 'Aktif';
+    const nextStatus = user.status === 'active' ? 'inactive' : 'active';
+    const statusLabel = nextStatus === 'active' ? 'Aktif' : 'Non-aktif';
     const ok = await confirm({
       title: `Ubah Status Akun?`,
-      message: `Apakah Anda yakin ingin mengubah status akun ${user.name} menjadi ${nextStatus}?`,
+      message: `Apakah Anda yakin ingin mengubah status akun ${user.name} menjadi ${statusLabel}?`,
       confirmText: 'Ubah Status'
     });
 
     if (ok) {
-      storageService.toggleUserStatus(user.id, currentAdmin?.name);
-      showSuccess(`Status ${user.name} berhasil diubah menjadi ${nextStatus}`);
-      loadUsers();
+      try {
+        await userService.updateUser(user.id, { status: nextStatus });
+        showSuccess(`Status ${user.name} berhasil diubah menjadi ${statusLabel}`);
+        loadUsers();
+      } catch (err) {
+        showError('Gagal mengubah status: ' + err.message);
+      }
     }
   };
 
   const handleDeleteUser = async (user) => {
     const ok = await confirm({
       title: 'Hapus Akun Pasien (Soft Delete)',
-      message: `Apakah Anda yakin ingin menghapus data pasien ${user.name}? Data akan ditandai sebagai terhapus namun riwayat audit tetap tersimpan.`,
+      message: `Apakah Anda yakin ingin menghapus data pasien ${user.name}? Data akan ditandai sebagai terhapus di database.`,
       confirmText: 'Ya, Hapus Data',
       danger: true
     });
 
     if (ok) {
-      storageService.deleteUser(user.id, currentAdmin?.name);
-      showSuccess(`Akun ${user.name} berhasil dihapus secara soft-delete.`);
-      loadUsers();
+      try {
+        await userService.deleteUser(user.id);
+        showSuccess(`Akun ${user.name} berhasil dinonaktifkan / dihapus (soft-delete).`);
+        loadUsers();
+      } catch (err) {
+        showError('Gagal menghapus akun: ' + err.message);
+      }
+    }
+  };
+
+  const handleRestoreUser = async (user) => {
+    const ok = await confirm({
+      title: 'Pulihkan Akun Pasien',
+      message: `Pulihkan akun ${user.name} dan aktifkan kembali di sistem?`,
+      confirmText: 'Pulihkan Akun'
+    });
+
+    if (ok) {
+      try {
+        await userService.restoreUser(user.id);
+        showSuccess(`Akun ${user.name} berhasil dipulihkan.`);
+        loadUsers();
+      } catch (err) {
+        showError('Gagal memulihkan akun: ' + err.message);
+      }
     }
   };
 
   const handleExportUsers = () => {
-    storageService.exportToCSV(users, `obsense_users_${Date.now()}.csv`);
-    showSuccess('Data pengguna berhasil diexport ke CSV!');
+    if (!users.length) return;
+    const headers = ['ID', 'Nama', 'Email', 'Telepon', 'Gender', 'Usia', 'Tinggi(cm)', 'Berat(kg)', 'BMI', 'Kelas Obesitas', 'Risk Level', 'Status'];
+    const rows = users.map(u => [
+      u.id, `"${u.name}"`, u.email, u.phone || '', u.gender, u.age, u.height, u.weight, u.bmi, u.obesity_class, u.risk_level, u.status
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `obsense_users_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccess('Data pengguna berhasil diexport ke file CSV!');
   };
 
   // Columns definition for DataTable
@@ -171,7 +213,7 @@ export const UserList = () => {
             Manajemen Data Pengguna
           </h1>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Daftar seluruh pasien, verifikasi data antropometri, riwayat asesmen, dan status akun.
+            Daftar seluruh pasien, verifikasi data antropometri, riwayat asesmen, dan status akun dari database MySQL.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -219,7 +261,15 @@ export const UserList = () => {
             >
               <Edit2 size={14} />
             </button>
-            {!row.deleted_at && (
+            {row.deleted_at ? (
+              <button
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400"
+                title="Pulihkan Akun"
+                onClick={() => handleRestoreUser(row)}
+              >
+                <RotateCcw size={14} />
+              </button>
+            ) : (
               <>
                 <button
                   className={`flex h-7 w-7 items-center justify-center rounded-lg border transition ${
@@ -263,9 +313,8 @@ export const UserList = () => {
           isOpen={editModalOpen}
           user={selectedUser}
           onClose={() => setEditModalOpen(false)}
-          onSaveSuccess={(updated) => {
+          onSaveSuccess={() => {
             loadUsers();
-            setSelectedUser(updated);
           }}
         />
       )}
@@ -274,4 +323,3 @@ export const UserList = () => {
 };
 
 export default UserList;
-

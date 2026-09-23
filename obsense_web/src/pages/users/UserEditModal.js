@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Scale, Save } from 'lucide-react';
+import { X, Scale, Save, Loader2 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
-import useAuth from '../../hooks/useAuth';
-import storageService from '../../mock/storageService';
+import userService from '../../services/userService';
 
 export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
-  const { user: currentAdmin } = useAuth();
   const { showSuccess, showError } = useNotification();
+  const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -44,24 +43,23 @@ export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
       ? (formData.weight / ((formData.height / 100) ** 2)).toFixed(1)
       : '0.0';
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.email || formData.height <= 0 || formData.weight <= 0) {
       showError('Harap lengkapi semua data wajib dengan benar!');
       return;
     }
 
+    setSubmitting(true);
     try {
-      const updated = storageService.updateUser(
-        user.id,
-        formData,
-        currentAdmin?.name || 'Administrator'
-      );
-      showSuccess(`Data antropometri ${updated.name} berhasil diperbarui!`);
-      onSaveSuccess(updated);
+      const res = await userService.updateUser(user.id, formData);
+      showSuccess(`Data antropometri ${formData.name} berhasil diperbarui di database!`);
+      if (onSaveSuccess) onSaveSuccess(res.data || formData);
       onClose();
     } catch (err) {
-      showError('Gagal memperbarui data pengguna: ' + err.message);
+      showError('Gagal memperbarui data pengguna: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -95,38 +93,50 @@ export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Lengkap *</label>
               <input
                 type="text"
+                required
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
               />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Email *</label>
               <input
                 type="email"
+                required
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nomor Telepon</label>
+              <input
+                type="tel"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              />
+            </div>
+            <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Jenis Kelamin</label>
               <select
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 value={formData.gender}
                 onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
               >
-                <option value="Male">Laki-laki (Male)</option>
-                <option value="Female">Perempuan (Female)</option>
+                <option value="Male">Laki-laki</option>
+                <option value="Female">Perempuan</option>
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Usia (Tahun) *</label>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Usia (Thn)</label>
               <input
                 type="number"
                 min="10"
@@ -134,81 +144,77 @@ export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 value={formData.age}
                 onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
-                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Tinggi (cm)</label>
+              <input
+                type="number"
+                step="0.5"
+                min="100"
+                max="250"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                value={formData.height}
+                onChange={(e) => setFormData({ ...formData, height: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Berat (kg)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="30"
+                max="300"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                value={formData.weight}
+                onChange={(e) => setFormData({ ...formData, weight: Number(e.target.value) })}
               />
             </div>
           </div>
 
-          <div className="rounded-xl border border-blue-500/20 bg-blue-50/50 p-4 space-y-3 dark:border-blue-500/20 dark:bg-blue-950/30">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-blue-950 dark:text-blue-200 mb-1">Tinggi Badan (cm) *</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="100"
-                  max="250"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                  value={formData.height}
-                  onChange={(e) => setFormData({ ...formData, height: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-blue-950 dark:text-blue-200 mb-1">Berat Badan (kg) *</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="20"
-                  max="300"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                  value={formData.weight}
-                  onChange={(e) => setFormData({ ...formData, weight: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-              </div>
+          {/* BMI Live Preview Box */}
+          <div className="flex items-center justify-between rounded-xl bg-blue-50/80 p-3 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/40">
+            <div className="flex items-center gap-2">
+              <Scale size={16} className="text-blue-600 dark:text-blue-400" />
+              <span className="text-xs font-semibold text-blue-900 dark:text-blue-300">Kalkulasi Otomatis BMI:</span>
             </div>
-
-            <div className="flex items-center gap-2 text-xs font-semibold text-blue-700 dark:text-blue-300">
-              <Scale size={16} />
-              <span>
-                Kalkulasi Otomatis BMI Baru: <strong>{calculatedBmi} kg/m²</strong>
-              </span>
+            <div className="flex items-baseline gap-1">
+              <span className="font-mono text-base font-black text-blue-600 dark:text-blue-400">{calculatedBmi}</span>
+              <span className="text-[10px] text-blue-700/80 dark:text-blue-300/80 font-bold">kg/m²</span>
             </div>
           </div>
 
-          <div className="pt-1">
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+          <div className="flex items-center justify-between pt-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
               <input
                 type="checkbox"
                 className="rounded text-blue-600 focus:ring-blue-500"
                 checked={formData.family_history_with_overweight}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    family_history_with_overweight: e.target.checked
-                  })
+                  setFormData({ ...formData, family_history_with_overweight: e.target.checked })
                 }
               />
-              <span>Ada riwayat keluarga dengan berat badan berlebih / obesitas</span>
+              <span>Riwayat keluarga obesitas</span>
             </label>
-          </div>
 
-          <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-            <button
-              type="button"
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-              onClick={onClose}
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-500"
-            >
-              <Save size={15} />
-              <span>Simpan Koreksi</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                onClick={onClose}
+                disabled={submitting}
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50"
+              >
+                {submitting ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                <span>Simpan Perubahan</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -217,4 +223,3 @@ export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
 };
 
 export default UserEditModal;
-

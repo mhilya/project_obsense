@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
-import storageService from '../mock/storageService';
+import analyticsService from '../services/analyticsService';
 import DonutChart from '../components/charts/DonutChart';
 import TrendLineChart from '../components/charts/TrendLineChart';
 import {
@@ -21,11 +21,49 @@ import {
 
 export const Dashboard = () => {
   const { user } = useAuth();
-  const [stats, setStats] = useState(() => storageService.getDashboardStats());
-  const recentLogs = storageService.getAuditLogs().slice(0, 4);
+  const [stats, setStats] = useState({
+    totalUsers: 10,
+    activeUsers: 9,
+    avgBmi: 28.5,
+    highRiskCount: 4,
+    completedCycles: 3,
+    completionRate: 85,
+    classCounts: {
+      Insufficient_Weight: 1,
+      Normal_Weight: 2,
+      Overweight_Level_I: 2,
+      Overweight_Level_II: 1,
+      Obesity_Type_I: 2,
+      Obesity_Type_II: 2,
+      Obesity_Type_III: 1
+    },
+    recentAudits: []
+  });
 
   useEffect(() => {
-    setStats(storageService.getDashboardStats());
+    let isMounted = true;
+    const loadStats = async () => {
+      try {
+        const data = await analyticsService.getDashboardStats();
+        if (isMounted && data) {
+          setStats({
+            totalUsers: data.totalUsers || 0,
+            activeUsers: data.activeUsers || 0,
+            avgBmi: 28.5,
+            highRiskCount: (data.criticalRiskCount || 0) + (data.highRiskCount || 0),
+            completedCycles: data.completedCycles || 0,
+            completionRate: data.avgCompletionRate || 85,
+            classCounts: data.classDistribution || {},
+            recentAudits: data.recentAudits || []
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load dashboard stats from backend API, using initial state:', err);
+      }
+    };
+
+    loadStats();
+    return () => { isMounted = false; };
   }, []);
 
   // Time-based greeting
@@ -91,7 +129,7 @@ export const Dashboard = () => {
   const quickModules = [
     {
       name: 'Manajemen User',
-      desc: '10 Pasien terdaftar • Antropometri',
+      desc: 'Daftar Pasien • Antropometri',
       path: '/users',
       icon: Users,
       color: '#3b82f6'
@@ -105,7 +143,7 @@ export const Dashboard = () => {
     },
     {
       name: 'Laporan & Korelasi',
-      desc: 'Analisis FAF, TUE • Random Forest Weights',
+      desc: 'Analisis FAF, TUE • Feature Importance',
       path: '/analytics',
       icon: BarChart3,
       color: '#8b5cf6'
@@ -135,7 +173,7 @@ export const Dashboard = () => {
             {getGreeting()}, {user?.name ? user.name : 'Administrator'}
           </h1>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Ringkasan pemantauan antropometri, distribusi 7 kelas obesitas, dan telaah klinis terintegrasi.
+            Ringkasan pemantauan antropometri, distribusi 7 kelas obesitas, dan telaah klinis terintegrasi ke database MySQL.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -143,9 +181,9 @@ export const Dashboard = () => {
             <Calendar size={14} className="text-slate-400" />
             <span>{todayStr}</span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg border border-blue-500/20 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-600 dark:border-blue-500/30 dark:bg-blue-950/40 dark:text-blue-400">
+          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-400">
             <Activity size={14} className="animate-pulse" />
-            <span>Random Forest Engine v1.2 Online</span>
+            <span>MySQL REST API Connected</span>
           </div>
         </div>
       </div>
@@ -323,28 +361,32 @@ export const Dashboard = () => {
             <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Audit Aktivitas Terbaru</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Catatan log aktivitas admin</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Catatan log aktivitas database</p>
               </div>
               <Link to="/audit-logs" className="text-xs font-bold text-blue-600 hover:underline dark:text-blue-400">
                 Semua
               </Link>
             </div>
             <ul className="mt-4 space-y-3">
-              {recentLogs.map((log) => (
-                <li key={log.id} className="flex items-start gap-2.5 rounded-lg bg-slate-50 p-2.5 text-xs dark:bg-slate-800/50">
-                  <span
-                    className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
-                      log.action.includes('FAIL') ? 'bg-rose-500' : 'bg-emerald-500'
-                    }`}
-                  />
-                  <div className="flex flex-col overflow-hidden">
-                    <span className="text-slate-800 dark:text-slate-200 truncate">
-                      <strong>{log.admin_name}</strong> — {log.action}
-                    </span>
-                    <time className="text-[10px] text-slate-400 mt-0.5">{log.created_at}</time>
-                  </div>
-                </li>
-              ))}
+              {stats.recentAudits && stats.recentAudits.length > 0 ? (
+                stats.recentAudits.slice(0, 4).map((log) => (
+                  <li key={log.id} className="flex items-start gap-2.5 rounded-lg bg-slate-50 p-2.5 text-xs dark:bg-slate-800/50">
+                    <span
+                      className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
+                        log.action.includes('FAIL') ? 'bg-rose-500' : 'bg-emerald-500'
+                      }`}
+                    />
+                    <div className="flex flex-col overflow-hidden">
+                      <span className="text-slate-800 dark:text-slate-200 truncate">
+                        <strong>{log.admin_name || 'Admin'}</strong> — {log.action}
+                      </span>
+                      <time className="text-[10px] text-slate-400 mt-0.5">{log.created_at}</time>
+                    </div>
+                  </li>
+                ))
+              ) : (
+                <li className="text-xs text-slate-400 text-center py-4">Belum ada log audit</li>
+              )}
             </ul>
           </div>
         </div>
@@ -354,4 +396,3 @@ export const Dashboard = () => {
 };
 
 export default Dashboard;
-

@@ -1,33 +1,40 @@
 import api from './api';
+import { STORAGE_KEYS } from '../utils/constants';
 
 export const authService = {
-  // Login user
-  login: async (credentials) => {
-    // Sesuaikan endpoint sesuai backend Anda nanti (misal: /auth/login atau /login)
-    const response = await api.post('/auth/login', credentials);
+  async login(email, password) {
+    const response = await api.post('/auth/login', { email, password });
     return response.data;
   },
 
-  // Register user baru
-  register: async (userData) => {
-    const response = await api.post('/auth/register', userData);
-    return response.data;
-  },
-
-  // Logout
-  logout: async () => {
-    try {
-      await api.post('/auth/logout');
-    } catch (e) {
-      console.warn('Backend logout failed or not implemented yet', e);
-    }
-  },
-
-  // Dapatkan profile user yang sedang login
-  getCurrentUser: async () => {
+  async getMe() {
     const response = await api.get('/auth/me');
     return response.data;
   },
+
+  async demoSwitch(role = 'super_admin') {
+    const response = await api.post('/auth/demo-switch', { role });
+    return response.data;
+  },
+
+  logout() {
+    localStorage.removeItem(STORAGE_KEYS.TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.USER);
+  },
+
+  getCurrentUser() {
+    const saved = localStorage.getItem(STORAGE_KEYS.USER);
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  },
+
+  getToken() {
+    return localStorage.getItem(STORAGE_KEYS.TOKEN);
+  }
 };
 
 export default authService;

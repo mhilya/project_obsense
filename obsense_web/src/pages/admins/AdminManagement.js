@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '../../components/common/DataTable';
-import storageService from '../../mock/storageService';
+import adminService from '../../services/adminService';
 import useAuth from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
 import {
@@ -11,7 +11,8 @@ import {
   X,
   Save,
   Clock,
-  Shield
+  Shield,
+  Loader2
 } from 'lucide-react';
 
 export const AdminManagement = () => {
@@ -19,28 +20,36 @@ export const AdminManagement = () => {
   const { showSuccess, showError, confirm } = useNotification();
 
   const [admins, setAdmins] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
   const [modalType, setModalType] = useState(null); // 'add' | 'edit'
   const [selectedAdmin, setSelectedAdmin] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    password: '',
     role: 'admin',
     is_active: true
   });
 
-  const loadAdmins = () => {
-    setAdmins(storageService.getAdmins());
-  };
+  const loadAdmins = useCallback(async () => {
+    try {
+      const data = await adminService.getAdmins();
+      setAdmins(data || []);
+    } catch (err) {
+      showError('Gagal memuat data admin dari server.');
+    }
+  }, [showError]);
 
   useEffect(() => {
     loadAdmins();
-  }, []);
+  }, [loadAdmins]);
 
   const handleOpenAdd = () => {
     setFormData({
       name: '',
       email: '',
+      password: 'admin123',
       role: 'admin',
       is_active: true
     });
@@ -52,31 +61,35 @@ export const AdminManagement = () => {
     setFormData({
       name: admin.name,
       email: admin.email,
+      password: '',
       role: admin.role,
       is_active: admin.is_active
     });
     setModalType('edit');
   };
 
-  const handleSaveModal = (e) => {
+  const handleSaveModal = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.email) {
       showError('Harap isi nama dan email admin!');
       return;
     }
 
+    setSubmitting(true);
     try {
       if (modalType === 'add') {
-        storageService.addAdmin(formData, currentAdmin?.name);
-        showSuccess(`Akun admin baru ${formData.name} berhasil dibuat!`);
+        await adminService.createAdmin(formData);
+        showSuccess(`Akun admin baru ${formData.name} berhasil dibuat di database!`);
       } else {
-        storageService.updateAdmin(selectedAdmin.id, formData, currentAdmin?.name);
+        await adminService.updateAdmin(selectedAdmin.id, formData);
         showSuccess(`Profil admin ${formData.name} berhasil diperbarui!`);
       }
       setModalType(null);
       loadAdmins();
     } catch (err) {
-      showError('Gagal menyimpan admin: ' + err.message);
+      showError('Gagal menyimpan admin: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -88,8 +101,12 @@ export const AdminManagement = () => {
     });
 
     if (ok) {
-      storageService.resetAdminPassword(admin.id, currentAdmin?.name);
-      showSuccess(`Password admin ${admin.email} berhasil di-reset ke 'admin123'.`);
+      try {
+        await adminService.updateAdmin(admin.id, { password: 'admin123' });
+        showSuccess(`Password admin ${admin.email} berhasil di-reset ke 'admin123'.`);
+      } catch (err) {
+        showError('Gagal reset password: ' + err.message);
+      }
     }
   };
 
@@ -108,9 +125,13 @@ export const AdminManagement = () => {
     });
 
     if (ok) {
-      storageService.updateAdmin(admin.id, { is_active: nextState }, currentAdmin?.name);
-      showSuccess(`Status admin ${admin.name} berhasil diubah.`);
-      loadAdmins();
+      try {
+        await adminService.updateAdmin(admin.id, { is_active: nextState });
+        showSuccess(`Status admin ${admin.name} berhasil diubah.`);
+        loadAdmins();
+      } catch (err) {
+        showError('Gagal mengubah status: ' + err.message);
+      }
     }
   };
 
@@ -182,7 +203,7 @@ export const AdminManagement = () => {
             Manajemen Akun Administrator
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Khusus Super Administrator: Kelola akun admin internal, atur hak akses (role), dan reset kredensial sandi.
+            Khusus Super Administrator: Kelola akun admin internal, hak akses (role), dan kredensial sandi di database MySQL.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -249,97 +270,93 @@ export const AdminManagement = () => {
             onClick={(e) => e.stopPropagation()}
             role="dialog"
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  {modalType === 'add' ? 'Tambah Administrator Baru' : 'Edit Profil Admin'}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Atur data dan hak akses sistem</p>
-              </div>
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-bold text-slate-900 dark:text-white">
+                {modalType === 'add' ? 'Tambah Akun Administrator' : 'Perbarui Profil Admin'}
+              </h3>
               <button
                 type="button"
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 onClick={() => setModalType(null)}
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveModal} className="p-6 space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Nama Lengkap *
+            <form onSubmit={handleSaveModal} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Lengkap & Gelar *
                 </label>
                 <input
                   type="text"
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  placeholder="Misal: Dr. Andi Pratama, Sp.GK"
+                  required
+                  placeholder="Misal: Dr. Sarah Amalia, Sp.GK"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Alamat Email *
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Alamat Email Resmi *
                 </label>
                 <input
                   type="email"
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  required
                   placeholder="admin@obsense.com"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Role Akses (Hak Istimewa)
+              {modalType === 'add' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Password Awal
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Default: admin123"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Tingkat Hak Akses (Role)
                 </label>
                 <select
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                 >
-                  <option value="admin">Admin Klinis (Operasional)</option>
-                  <option value="super_admin">Super Administrator (Akses Penuh)</option>
+                  <option value="admin">Admin Klinis (Koreksi Data, Evaluasi Klinis & Validasi)</option>
+                  <option value="super_admin">Super Administrator (Akses Penuh & Konfigurasi Sistem)</option>
                 </select>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                  Super Admin dapat mengelola akun admin lain dan konfigurasi sistem tingkat lanjut.
-                </p>
               </div>
 
-              <div className="pt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
-                    checked={formData.is_active}
-                    onChange={(e) =>
-                      setFormData({ ...formData, is_active: e.target.checked })
-                    }
-                  />
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Akun Aktif (Bisa login ke sistem)
-                  </span>
-                </label>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                  className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
                   onClick={() => setModalType(null)}
+                  disabled={submitting}
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition-all"
+                  disabled={submitting}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm disabled:opacity-50"
                 >
-                  <Save size={16} /> Simpan Akun Admin
+                  {submitting ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  <span>{modalType === 'add' ? 'Simpan Admin' : 'Simpan Perubahan'}</span>
                 </button>
               </div>
             </form>

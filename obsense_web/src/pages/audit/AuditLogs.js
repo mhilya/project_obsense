@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '../../components/common/DataTable';
-import storageService from '../../mock/storageService';
+import auditService from '../../services/auditService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   FileSpreadsheet,
@@ -10,35 +10,49 @@ import {
 } from 'lucide-react';
 
 export const AuditLogs = () => {
-  const { showSuccess } = useNotification();
+  const { showSuccess, showError } = useNotification();
   const [logs, setLogs] = useState([]);
   const [selectedLog, setSelectedLog] = useState(null);
 
-  const loadLogs = () => {
-    setLogs(storageService.getAuditLogs());
-  };
+  const loadLogs = useCallback(async () => {
+    try {
+      const data = await auditService.getAuditLogs({ limit: 200 });
+      setLogs(data || []);
+    } catch (err) {
+      showError('Gagal memuat log audit dari database.');
+    }
+  }, [showError]);
 
   useEffect(() => {
     loadLogs();
-  }, []);
+  }, [loadLogs]);
 
   const handleExportCSV = () => {
-    const exportable = logs.map((l) => ({
-      ID: l.id,
-      Waktu: l.created_at,
-      Admin: l.admin_name || l.admin_email || 'System',
-      Aksi: l.action,
-      Entitas: l.entity_type,
-      TargetID: l.entity_id || '-',
-      IP: l.ip_address || '127.0.0.1',
-      DetailPerubahan: JSON.stringify(l.details || {})
-    }));
-    storageService.exportToCSV(exportable, `obsense_audit_trail_${Date.now()}.csv`);
+    if (!logs.length) return;
+    const headers = ['ID', 'Waktu', 'Admin', 'Aksi', 'Entitas', 'TargetID', 'IP', 'Detail'];
+    const rows = logs.map((l) => [
+      l.id,
+      `"${l.created_at}"`,
+      `"${l.admin_name || l.admin_email || 'System'}"`,
+      l.action,
+      l.entity_type,
+      l.entity_id || '-',
+      l.ip_address || '127.0.0.1',
+      `"${JSON.stringify(l.details || {}).replace(/"/g, '""')}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `obsense_audit_trail_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     showSuccess('Audit log trail berhasil diexport ke CSV untuk compliance!');
   };
 
   const getActionBadgeColor = (action) => {
-    if (action.includes('DELETE')) return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+    if (action.includes('DELETE') || action.includes('FAIL')) return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
     if (action.includes('UPDATE') || action.includes('CONFIG')) return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
     if (action.includes('LOGIN') || action.includes('CREATE')) return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
     return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
@@ -87,8 +101,10 @@ export const AuditLogs = () => {
 
   const actionFilterOptions = [
     { label: 'LOGIN', value: 'LOGIN' },
+    { label: 'CREATE_USER', value: 'CREATE_USER' },
     { label: 'UPDATE_USER', value: 'UPDATE_USER' },
-    { label: 'SOFT_DELETE_USER', value: 'SOFT_DELETE_USER' },
+    { label: 'DELETE_USER', value: 'DELETE_USER' },
+    { label: 'RESTORE_USER', value: 'RESTORE_USER' },
     { label: 'EVALUATE', value: 'EVALUATE' },
     { label: 'UPDATE_CONFIG', value: 'UPDATE_CONFIG' },
     { label: 'EXPORT_DATA', value: 'EXPORT_DATA' }
@@ -99,19 +115,19 @@ export const AuditLogs = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-            Audit Logs & Compliance Trail
+            Log Audit & Rekam Jejak Sistem
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Pelacakan seluruh aktivitas admin, riwayat modifikasi entitas, dan inspeksi detail Before/After JSON.
+            Pelacakan aktivitas administratif, riwayat modifikasi data (before & after), dan kepatuhan keamanan di database MySQL.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition-all"
             onClick={handleExportCSV}
           >
-            <FileSpreadsheet size={16} /> Export Audit Log ke CSV
+            <FileSpreadsheet size={16} /> Export Audit Log
           </button>
         </div>
       </div>
@@ -120,74 +136,84 @@ export const AuditLogs = () => {
         <DataTable
           columns={columns}
           data={logs}
-          searchPlaceholder="Cari nama admin, aksi, entitas..."
-          searchKeys={['admin_name', 'action', 'entity_type', 'entity_id']}
+          searchPlaceholder="Cari nama admin, aksi, atau entitas target..."
+          searchKeys={['admin_name', 'action', 'entity_type', 'ip_address']}
           filterKey="action"
           filterOptions={actionFilterOptions}
-          filterLabel="Semua Jenis Aksi"
+          filterLabel="Semua Aksi Sistem"
           defaultPageSize={10}
           rowActions={(row) => (
             <button
               type="button"
-              className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:text-slate-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/30 transition-all"
-              title="Lihat Detail Perubahan JSON"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-all"
               onClick={() => setSelectedLog(row)}
             >
-              <Code2 size={16} />
+              <Code2 size={13} />
+              <span>Detail JSON</span>
             </button>
           )}
         />
       </div>
 
-      {/* JSON Before/After Diff Modal */}
+      {/* JSON Detail Modal */}
       {selectedLog && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
           onClick={() => setSelectedLog(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200"
+            className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[85vh]"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                  <Code2 size={20} />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    Detail Perubahan Aksi #{selectedLog.id}
-                  </h3>
-                  <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">
-                    {selectedLog.action} pada {selectedLog.entity_type} oleh {selectedLog.admin_name} ({selectedLog.created_at})
-                  </span>
-                </div>
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white">
+                  Detail Snapshot Audit #{selectedLog.id}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {selectedLog.admin_name} • {selectedLog.action}
+                </p>
               </div>
               <button
                 type="button"
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 onClick={() => setSelectedLog(null)}
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-4">
-              <div className="space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Payload Details (JSON Schema):
+            <div className="p-5 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block text-[10px] font-bold uppercase">Entitas Target</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">
+                    {selectedLog.entity_type} {selectedLog.entity_id ? `(#${selectedLog.entity_id})` : ''}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block text-[10px] font-bold uppercase">IP Address</span>
+                  <span className="font-bold font-mono text-slate-800 dark:text-slate-200 mt-1 block">
+                    {selectedLog.ip_address || '127.0.0.1'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-2">
+                  Payload Data (State Snapshot / Event Details):
                 </span>
-                <pre className="p-4 rounded-xl bg-slate-900 text-emerald-400 font-mono text-xs overflow-x-auto leading-relaxed border border-slate-800">
-                  {JSON.stringify(selectedLog.details || {}, null, 2)}
+                <pre className="p-3.5 rounded-xl bg-slate-950 text-emerald-400 text-[11px] font-mono overflow-x-auto leading-relaxed border border-slate-800 max-h-60">
+                  {JSON.stringify(selectedLog.details, null, 2)}
                 </pre>
               </div>
             </div>
 
-            <div className="flex items-center justify-end px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
               <button
                 type="button"
-                className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                 onClick={() => setSelectedLog(null)}
               >
                 Tutup

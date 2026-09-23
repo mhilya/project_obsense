@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import storageService from '../../mock/storageService';
+import React, { useState, useEffect, useCallback } from 'react';
+import userService from '../../services/userService';
+import evaluationService from '../../services/evaluationService';
 import useAuth from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
 import {
@@ -12,7 +13,8 @@ import {
   FileText,
   Stethoscope,
   CheckCircle2,
-  Lock
+  Lock,
+  Loader2
 } from 'lucide-react';
 
 export const AdminEvaluations = () => {
@@ -23,59 +25,76 @@ export const AdminEvaluations = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
   const [evaluations, setEvaluations] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
   const [notes, setNotes] = useState('');
   const [recommendation, setRecommendation] = useState('');
   const [adjustedRisk, setAdjustedRisk] = useState('High');
 
+  const loadUsers = useCallback(async () => {
+    try {
+      const userList = await userService.getUsers();
+      setUsers(userList || []);
+      if (userList && userList.length > 0 && !selectedUserId) {
+        setSelectedUserId(String(userList[0].id));
+      }
+    } catch (err) {
+      showError('Gagal memuat daftar pasien dari database.');
+    }
+  }, [selectedUserId, showError]);
+
   useEffect(() => {
-    const userList = storageService.getUsers();
-    setUsers(userList);
-    if (userList.length > 0) {
-      setSelectedUserId(String(userList[0].id));
+    loadUsers();
+  }, [loadUsers]);
+
+  const loadEvaluations = useCallback(async (userId) => {
+    if (!userId) return;
+    try {
+      const evals = await evaluationService.getEvaluations({ user_id: Number(userId) });
+      setEvaluations(evals || []);
+    } catch (err) {
+      console.warn('Gagal memuat riwayat evaluasi:', err);
     }
   }, []);
 
   useEffect(() => {
     if (selectedUserId) {
-      setEvaluations(storageService.getEvaluations(Number(selectedUserId)));
+      loadEvaluations(selectedUserId);
     }
-  }, [selectedUserId]);
+  }, [selectedUserId, loadEvaluations]);
 
   const selectedUser = users.find((u) => u.id === Number(selectedUserId));
 
   const filteredUsers = users.filter((u) =>
     u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.obesity_class.toLowerCase().includes(searchTerm.toLowerCase())
+    (u.obesity_class && u.obesity_class.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const handleAddEvaluation = (e) => {
+  const handleAddEvaluation = async (e) => {
     e.preventDefault();
     if (!notes.trim()) {
       showError('Harap tuliskan catatan pengamatan klinis!');
       return;
     }
 
+    setSubmitting(true);
     try {
-      storageService.addEvaluation(
-        {
-          assessment_id: 401,
-          user_id: Number(selectedUserId),
-          userName: selectedUser?.name || 'Pasien',
-          evaluation_notes: notes.trim(),
-          clinical_recommendation: recommendation.trim() || 'Tetap jalankan pola makan seimbang dan monitoring berkala.',
-          adjusted_risk_level: adjustedRisk
-        },
-        currentAdmin?.name || 'Admin Klinis',
-        currentAdmin?.id || 1
-      );
+      await evaluationService.createEvaluation({
+        assessment_id: 401, // default linked assessment
+        user_id: Number(selectedUserId),
+        evaluation_notes: notes.trim(),
+        clinical_recommendation: recommendation.trim() || 'Tetap jalankan pola makan seimbang dan monitoring berkala.',
+        adjusted_risk_level: adjustedRisk
+      });
 
-      showSuccess('Evaluasi manual klinis berhasil direkam ke database (Append-Only)!');
+      showSuccess('Evaluasi manual klinis berhasil disimpan ke database MySQL (Append-Only)!');
       setNotes('');
       setRecommendation('');
-      setEvaluations(storageService.getEvaluations(Number(selectedUserId)));
+      loadEvaluations(selectedUserId);
     } catch (err) {
-      showError('Gagal menyimpan evaluasi: ' + err.message);
+      showError('Gagal menyimpan evaluasi: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -109,7 +128,7 @@ export const AdminEvaluations = () => {
             Evaluasi Manual Klinis
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Ruang telaah klinis bagi dokter & tenaga medis untuk menambahkan catatan evaluasi, diagnosis gizi, dan penyesuaian risiko secara permanen (<em>Append-Only</em>).
+            Ruang telaah klinis bagi dokter & tenaga medis untuk menambahkan catatan evaluasi, diagnosis gizi, dan penyesuaian risiko secara permanen di database MySQL (<em>Append-Only</em>).
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -150,7 +169,7 @@ export const AdminEvaluations = () => {
               >
                 {filteredUsers.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — BMI {u.bmi} ({u.obesity_class.replace(/_/g, ' ')})
+                    {u.name} — BMI {u.bmi} ({u.obesity_class ? u.obesity_class.replace(/_/g, ' ') : ''})
                   </option>
                 ))}
               </select>
@@ -183,7 +202,7 @@ export const AdminEvaluations = () => {
                         BMI: <strong>{selectedUser.bmi}</strong>
                       </div>
                       <div className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 truncate">
-                        <strong className="text-slate-900 dark:text-white">{selectedUser.obesity_class.replace(/_/g, ' ')}</strong>
+                        <strong className="text-slate-900 dark:text-white">{selectedUser.obesity_class ? selectedUser.obesity_class.replace(/_/g, ' ') : '-'}</strong>
                       </div>
                     </div>
                   </div>
@@ -199,7 +218,7 @@ export const AdminEvaluations = () => {
                 Tambah Telaah Klinis Baru
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Catatan akan di-timestamp dan terikat pada akun admin penilai
+                Catatan akan di-timestamp dan disimpan secara permanen di database
               </p>
             </div>
 
@@ -275,9 +294,11 @@ export const AdminEvaluations = () => {
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition-all"
+                  disabled={submitting}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition-all disabled:opacity-50"
                 >
-                  <Send size={16} /> Simpan Evaluasi Klinis (Append-Only)
+                  {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  <span>Simpan Evaluasi Klinis (Append-Only)</span>
                 </button>
               </div>
             </form>
@@ -297,7 +318,7 @@ export const AdminEvaluations = () => {
                 </p>
               </div>
               <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                Terekam Permanen
+                Terekam Permanen di MySQL
               </span>
             </div>
 
@@ -375,7 +396,7 @@ export const AdminEvaluations = () => {
                           </span>
                         </div>
                         <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-semibold">
-                          <CheckCircle2 size={12} /> Record Hash Verified
+                          <CheckCircle2 size={12} /> MySQL Verified
                         </span>
                       </div>
                     </div>

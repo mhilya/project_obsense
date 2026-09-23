@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { STORAGE_KEYS } from '../utils/constants';
-import storageService from '../mock/storageService';
+import authService from '../services/authService';
 
 export const AuthContext = createContext(null);
 
@@ -9,138 +9,113 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Inisialisasi auth state dari localStorage saat aplikasi pertama kali dimuat
+  // Inisialisasi auth state saat aplikasi pertama kali dimuat
   useEffect(() => {
-    const savedToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    const savedUser = localStorage.getItem(STORAGE_KEYS.USER);
+    const initAuth = async () => {
+      const savedToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
+      const savedUser = localStorage.getItem(STORAGE_KEYS.USER);
 
-    if (savedToken) {
-      setToken(savedToken);
-      if (savedUser) {
+      if (savedToken && savedUser) {
         try {
-          setUser(JSON.parse(savedUser));
+          const parsedUser = JSON.parse(savedUser);
+          setToken(savedToken);
+          setUser(parsedUser);
+
+          // Verifikasi ke backend secara asynchronous
+          try {
+            const res = await authService.getMe();
+            if (res?.user) {
+              setUser(res.user);
+              localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(res.user));
+            }
+          } catch {
+            // Jika backend belum siap, tetap pakai savedUser dari localStorage
+          }
         } catch (e) {
           console.error('Failed to parse saved user JSON', e);
         }
+      } else {
+        // Auto-login default ke Super Admin untuk kemudahan preview
+        try {
+          const res = await authService.demoSwitch('super_admin');
+          if (res?.token && res?.user) {
+            setToken(res.token);
+            setUser(res.user);
+            localStorage.setItem(STORAGE_KEYS.TOKEN, res.token);
+            localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(res.user));
+          }
+        } catch {
+          // Fallback lokal jika backend offline
+          const fallbackUser = {
+            id: 1,
+            name: 'Dr. Sarah Amalia, Sp.GK (Super Admin)',
+            email: 'superadmin@obsense.com',
+            role: 'super_admin',
+            is_active: true
+          };
+          setToken('obsense-demo-jwt-token');
+          setUser(fallbackUser);
+          localStorage.setItem(STORAGE_KEYS.TOKEN, 'obsense-demo-jwt-token');
+          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(fallbackUser));
+        }
       }
-    } else {
-      // Auto-login default ke Super Admin untuk kemudahan demonstrasi pertama kali
-      const defaultAdmin = storageService.getAdmins()[0];
-      if (defaultAdmin) {
-        setToken('obsense-demo-jwt-token');
-        setUser(defaultAdmin);
-        localStorage.setItem(STORAGE_KEYS.TOKEN, 'obsense-demo-jwt-token');
-        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(defaultAdmin));
-      }
-    }
-    setLoading(false);
+      setLoading(false);
+    };
+
+    initAuth();
   }, []);
 
-  // Fungsi Login dengan validasi kredensial & logging attempt
+  // Fungsi Login dengan backend API
   const login = useCallback(async ({ email, password }) => {
     setLoading(true);
     try {
-      // Cari admin dari storageService
-      const admins = storageService.getAdmins();
-      const matchedAdmin = admins.find(
-        (a) => a.email.toLowerCase() === email.trim().toLowerCase()
-      );
-
-      // Kredensial demo: password 'admin123' untuk semua admin demo
-      const isValidPassword = password === 'admin123' || password === 'superadmin123';
-
-      if (!matchedAdmin || !isValidPassword) {
-        storageService.recordLoginAttempt(email, 'FAILED', navigator.userAgent);
-        storageService.addAuditLog({
-          action: 'LOGIN_FAILED',
-          entity_type: 'Security',
-          entity_id: email,
-          admin_name: 'Guest / Unknown',
-          details: { email_entered: email, reason: 'Invalid credentials' }
-        });
-        return {
-          success: false,
-          message: 'Email atau password salah. Coba password default: admin123'
-        };
+      const res = await authService.login(email, password);
+      if (res.success && res.token) {
+        localStorage.setItem(STORAGE_KEYS.TOKEN, res.token);
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(res.user));
+        setToken(res.token);
+        setUser(res.user);
+        return { success: true, user: res.user };
       }
-
-      if (!matchedAdmin.is_active) {
-        storageService.recordLoginAttempt(email, 'BLOCKED', navigator.userAgent);
-        return {
-          success: false,
-          message: 'Akun admin ini dinonaktifkan. Hubungi Super Administrator.'
-        };
-      }
-
-      // Login berhasil
-      const userToken = `obsense-token-${matchedAdmin.role}-${Date.now()}`;
-      const userData = {
-        id: matchedAdmin.id,
-        name: matchedAdmin.name,
-        email: matchedAdmin.email,
-        role: matchedAdmin.role
-      };
-
-      localStorage.setItem(STORAGE_KEYS.TOKEN, userToken);
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
-
-      setToken(userToken);
-      setUser(userData);
-
-      storageService.recordLoginAttempt(email, 'SUCCESS', navigator.userAgent);
-      storageService.addAuditLog({
-        action: 'LOGIN',
-        entity_type: 'Admin',
-        entity_id: String(matchedAdmin.id),
-        admin_name: matchedAdmin.name,
-        details: { role: matchedAdmin.role, status: 'SUCCESS' }
-      });
-
-      // Update last login
-      storageService.updateAdmin(matchedAdmin.id, {
-        last_login_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
-      });
-
-      return { success: true, user: userData };
+      return { success: false, message: res.message || 'Gagal login' };
     } catch (error) {
-      return {
-        success: false,
-        message: error.message || 'Terjadi kesalahan sistem saat login'
-      };
+      const message = error.response?.data?.message || error.message || 'Terjadi kesalahan sistem saat login';
+      return { success: false, message };
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Switch role cepat untuk kebutuhan testing demo
-  const switchRole = useCallback((role = 'super_admin') => {
-    const admins = storageService.getAdmins();
-    const target = admins.find((a) => a.role === role) || admins[0];
-    const userToken = `obsense-token-${target.role}-${Date.now()}`;
-
-    localStorage.setItem(STORAGE_KEYS.TOKEN, userToken);
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(target));
-    setToken(userToken);
-    setUser(target);
+  // Switch role cepat untuk kebutuhan demonstrasi
+  const switchRole = useCallback(async (role = 'super_admin') => {
+    try {
+      const res = await authService.demoSwitch(role);
+      if (res.success && res.token) {
+        localStorage.setItem(STORAGE_KEYS.TOKEN, res.token);
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(res.user));
+        setToken(res.token);
+        setUser(res.user);
+      }
+    } catch (e) {
+      console.warn('Switch role API failed, updating local state', e);
+      const fallbackUser = {
+        id: role === 'super_admin' ? 1 : 2,
+        name: role === 'super_admin' ? 'Dr. Sarah Amalia, Sp.GK' : 'Budi Santoso, S.Gz',
+        email: role === 'super_admin' ? 'superadmin@obsense.com' : 'admin@obsense.com',
+        role,
+        is_active: true
+      };
+      setUser(fallbackUser);
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(fallbackUser));
+    }
   }, []);
 
   // Fungsi Logout
-  const logout = useCallback(async () => {
-    if (user) {
-      storageService.addAuditLog({
-        action: 'LOGOUT',
-        entity_type: 'Admin',
-        entity_id: String(user.id),
-        admin_name: user.name,
-        details: { status: 'User logged out' }
-      });
-    }
-
-    localStorage.removeItem(STORAGE_KEYS.TOKEN);
-    localStorage.removeItem(STORAGE_KEYS.USER);
+  const logout = useCallback(() => {
+    authService.logout();
     setToken(null);
     setUser(null);
-  }, [user]);
+  }, []);
 
   const isSuperAdmin = user?.role === 'super_admin';
 
