@@ -30,7 +30,6 @@ async function initDatabase() {
     await initialConnection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
     await initialConnection.end();
 
-    // 2. Inisialisasi tabel users & hapus tabel sensor jika ada
     const connection = await pool.getConnection();
 
     await connection.query(`
@@ -45,7 +44,6 @@ async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
-    // Hapus tabel sensor_logs dan devices jika sebelumnya pernah dibuat
     await connection.query(`DROP TABLE IF EXISTS \`sensor_logs\`;`);
     await connection.query(`DROP TABLE IF EXISTS \`devices\`;`);
 

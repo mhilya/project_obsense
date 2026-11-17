@@ -55,6 +55,14 @@ export const TrendLineChart = () => {
     { key: 'critical', label: 'Kritis', color: '#991b1b' }
   ];
 
+  if (data.length < 2) {
+    return (
+      <div className="w-full py-10 text-center text-sm text-slate-400 dark:text-slate-500">
+        Belum ada data tren risiko.
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
       {/* Header & Toggle */}
