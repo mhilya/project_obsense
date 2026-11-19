@@ -58,9 +58,9 @@ export const UserDetailModal = ({ isOpen, user, onClose, onEdit }) => {
         </div>
 
         {/* Modal Tabs */}
-        <div className="flex border-b border-slate-100 bg-slate-50/50 px-5 dark:border-slate-800 dark:bg-slate-950/40">
+        <div className="flex overflow-x-auto whitespace-nowrap border-b border-slate-100 bg-slate-50/50 px-3 sm:px-5 dark:border-slate-800 dark:bg-slate-950/40 scrollbar-none">
           <button
-            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${
+            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition shrink-0 ${
               activeTab === 'profile'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
@@ -70,7 +70,7 @@ export const UserDetailModal = ({ isOpen, user, onClose, onEdit }) => {
             <User size={14} /> Profil Antropometri
           </button>
           <button
-            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${
+            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition shrink-0 ${
               activeTab === 'assessments'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
@@ -80,7 +80,7 @@ export const UserDetailModal = ({ isOpen, user, onClose, onEdit }) => {
             <Activity size={14} /> Riwayat Prediksi ML ({assessments.length})
           </button>
           <button
-            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${
+            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition shrink-0 ${
               activeTab === 'logs'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'

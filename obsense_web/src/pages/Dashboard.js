@@ -151,27 +151,31 @@ export const Dashboard = () => {
       </div>
 
       {/* Critical Alert Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-50/80 p-4.5 dark:border-amber-500/20 dark:bg-amber-950/30">
-        <div className="flex items-start gap-3.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 shrink-0 dark:text-amber-400">
-            <AlertTriangle size={20} />
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-50/90 p-4 sm:p-5 shadow-sm dark:border-amber-500/25 dark:bg-amber-950/30 transition-all">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+              <AlertTriangle size={20} />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-amber-950 dark:text-amber-200">
+                Perhatian Medis: Kasus Obesitas Morbid Terdeteksi
+              </h4>
+              <p className="text-xs text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
+                Pasien <strong>Dimas Prasetyo (24 Thn)</strong> terdeteksi memiliki BMI <strong>41.4 kg/m²</strong> (Obesity Type III) dengan screen time tinggi (&gt;5 jam/hari). Disarankan verifikasi evaluasi klinis.
+              </p>
+            </div>
           </div>
-          <div>
-            <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
-              Perhatian Medis: Kasus Obesitas Morbid Terdeteksi
-            </h4>
-            <p className="text-xs text-amber-700 dark:text-amber-300/80 mt-0.5">
-              Pasien <strong>Dimas Prasetyo (24 Thn)</strong> terdeteksi memiliki BMI <strong>41.4 kg/m²</strong> (Obesity Type III) dengan screen time tinggi (&gt;5 jam/hari). Disarankan verifikasi evaluasi klinis.
-            </p>
+          <div className="flex justify-start md:justify-end shrink-0 w-full md:w-auto pt-1 md:pt-0">
+            <Link
+              to="/evaluations"
+              className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm shadow-amber-600/20 transition-all hover:bg-amber-700 active:scale-[0.98]"
+            >
+              <span>Tinjau Pasien Sekarang</span>
+              <ArrowRight size={14} />
+            </Link>
           </div>
         </div>
-        <Link
-          to="/evaluations"
-          className="inline-flex items-center gap-1.5 rounded-xl border border-amber-600 bg-amber-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-amber-700 shrink-0"
-        >
-          <span>Tinjau Pasien Sekarang</span>
-          <ArrowRight size={14} />
-        </Link>
       </div>
 
       {/* 4 Interactive Stat Cards */}

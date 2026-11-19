@@ -36,6 +36,9 @@ module.exports = {
         sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'Menlo', 'monospace']
       },
+      screens: {
+        'xs': '480px',
+      },
       borderRadius: {
         'xs': '4px',
         'sm': '6px',
