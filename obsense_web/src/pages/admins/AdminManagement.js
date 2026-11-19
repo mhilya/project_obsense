@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DataTable from '../../components/common/DataTable';
-import storageService from '../../mock/storageService';
+import api from '../../services/api';
 import useAuth from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
 import {
@@ -25,12 +25,20 @@ export const AdminManagement = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    password: '',
     role: 'admin',
     is_active: true
   });
 
-  const loadAdmins = () => {
-    setAdmins(storageService.getAdmins());
+  const errMsg = (err) => err.response?.data?.message || err.message || 'Terjadi kesalahan.';
+
+  const loadAdmins = async () => {
+    try {
+      const res = await api.get('/auth/admins');
+      setAdmins(res.data.admins);
+    } catch (err) {
+      showError('Gagal memuat daftar admin: ' + errMsg(err));
+    }
   };
 
   useEffect(() => {
@@ -41,6 +49,7 @@ export const AdminManagement = () => {
     setFormData({
       name: '',
       email: '',
+      password: '',
       role: 'admin',
       is_active: true
     });
@@ -58,38 +67,50 @@ export const AdminManagement = () => {
     setModalType('edit');
   };
 
-  const handleSaveModal = (e) => {
+  const handleSaveModal = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.email) {
       showError('Harap isi nama dan email admin!');
       return;
     }
+    if (modalType === 'add' && (!formData.password || formData.password.length < 6)) {
+      showError('Password awal wajib diisi (minimal 6 karakter).');
+      return;
+    }
 
     try {
       if (modalType === 'add') {
-        storageService.addAdmin(formData, currentAdmin?.name);
+        await api.post('/auth/admins', formData);
         showSuccess(`Akun admin baru ${formData.name} berhasil dibuat!`);
       } else {
-        storageService.updateAdmin(selectedAdmin.id, formData, currentAdmin?.name);
+        const { name, email, role, is_active } = formData;
+        await api.put(`/auth/admins/${selectedAdmin.id}`, { name, email, role, is_active });
         showSuccess(`Profil admin ${formData.name} berhasil diperbarui!`);
       }
       setModalType(null);
       loadAdmins();
     } catch (err) {
-      showError('Gagal menyimpan admin: ' + err.message);
+      showError('Gagal menyimpan admin: ' + errMsg(err));
     }
   };
 
   const handleResetPassword = async (admin) => {
     const ok = await confirm({
       title: 'Reset Password Akun Admin',
-      message: `Reset kata sandi untuk akun ${admin.email} ke kata sandi standar (admin123)?`,
+      message: `Buat password sementara baru untuk akun ${admin.email}?`,
       confirmText: 'Reset Password'
     });
 
     if (ok) {
-      storageService.resetAdminPassword(admin.id, currentAdmin?.name);
-      showSuccess(`Password admin ${admin.email} berhasil di-reset ke 'admin123'.`);
+      try {
+        const res = await api.post(`/auth/admins/${admin.id}/reset-password`);
+        window.alert(
+          `Password sementara untuk ${admin.email}:\n\n${res.data.temporary_password}\n\nCatat sekarang, password ini tidak akan ditampilkan lagi.`
+        );
+        showSuccess(`Password admin ${admin.email} berhasil di-reset.`);
+      } catch (err) {
+        showError('Gagal reset password: ' + errMsg(err));
+      }
     }
   };
 
@@ -108,12 +129,15 @@ export const AdminManagement = () => {
     });
 
     if (ok) {
-      storageService.updateAdmin(admin.id, { is_active: nextState }, currentAdmin?.name);
-      showSuccess(`Status admin ${admin.name} berhasil diubah.`);
-      loadAdmins();
+      try {
+        await api.put(`/auth/admins/${admin.id}`, { is_active: nextState });
+        showSuccess(`Status admin ${admin.name} berhasil diubah.`);
+        loadAdmins();
+      } catch (err) {
+        showError('Gagal mengubah status: ' + errMsg(err));
+      }
     }
   };
-
   const columns = [
     {
       header: 'Nama & Email Admin',
@@ -164,7 +188,7 @@ export const AdminManagement = () => {
           {val ? (
             <>
               <Clock size={12} className="text-slate-400" />
-              {val}
+              {new Date(val).toLocaleString('id-ID')}
             </>
           ) : (
             'Belum pernah login'
@@ -293,6 +317,22 @@ export const AdminManagement = () => {
                   required
                 />
               </div>
+
+              {modalType === 'add' && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Password Awal * (min. 6 karakter)
+                  </label>
+                  <input
+                    type="password"
+                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    minLength={6}
+                    required
+                  />
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
