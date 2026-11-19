@@ -4,94 +4,119 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
+  ScrollView,
+  StatusBar,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { loginUser } from '../utils/authStorage';
-import CustomAlert, { AlertType, AlertButton } from '../components/CustomAlert';
-import styles from '../styles/LoginScreen';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import Logo from '../components/Logo';
+import { Colors } from '../theme';
+import styles from '../styles/LoginScreen.styles';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
-  // Alert state
-  const [alertVisible, setAlertVisible] = useState(false);
-  const [alertType, setAlertType] = useState<AlertType>('info');
-  const [alertTitle, setAlertTitle] = useState('');
-  const [alertMessage, setAlertMessage] = useState('');
-  const [alertButtons, setAlertButtons] = useState<AlertButton[]>([{ text: 'OK' }]);
-
-  const showAlert = (
-    type: AlertType,
-    title: string,
-    message: string,
-    buttons?: AlertButton[],
-  ) => {
-    setAlertType(type);
-    setAlertTitle(title);
-    setAlertMessage(message);
-    setAlertButtons(buttons ?? [{ text: 'OK' }]);
-    setAlertVisible(true);
-  };
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = () => {
-    // TODO: aktifkan kembali validasi login saat auth sudah siap
-    // if (!email.trim() || !password.trim()) {
-    //   showAlert('warning', 'Perhatian', 'Email dan password harus diisi.');
-    //   return;
-    // }
-    // const user = loginUser(email.trim(), password);
-    // if (!user) {
-    //   showAlert('error', 'Login Gagal', 'Email atau password yang kamu masukkan salah.');
-    //   return;
-    // }
-    navigation.replace('Home');
+    // TODO: Add validation and authentication
+    navigation.replace('Main');
   };
 
   return (
     <>
-      <View style={styles.container}>
-        <Text style={styles.title}>Login</Text>
+      <StatusBar barStyle="dark-content" />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Brand Logo */}
+        <View style={styles.brandContainer}>
+          <Logo size="large" showText={true} />
+        </View>
 
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Masukkan email"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
+        {/* Welcome Text */}
+        <View style={styles.welcomeSection}>
+          <Text style={styles.eyebrow}>SELAMAT DATANG KEMBALI</Text>
+          <Text style={styles.title}>Masuk ke akunmu</Text>
+          <Text style={styles.subtitle}>
+            Masukkan detail akun untuk melanjutkan.
+          </Text>
+        </View>
 
-        <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Masukkan password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        {/* Email Input */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Email</Text>
+          <View style={styles.inputContainer}>
+            <Icon name="mail-outline" size={20} color={Colors.textMuted} />
+            <TextInput
+              style={styles.input}
+              placeholder="example@email.com"
+              placeholderTextColor={Colors.textMuted}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        </View>
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Masuk</Text>
+        {/* Password Input */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Kata sandi</Text>
+          <View style={styles.inputContainer}>
+            <Icon name="lock-outline" size={20} color={Colors.textMuted} />
+            <TextInput
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor={Colors.textMuted}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeButton}
+            >
+              <Text style={styles.eyeButtonText}>
+                {showPassword ? 'Sembunyikan' : 'Lihat'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Forgot Password Link */}
+        <TouchableOpacity style={styles.forgotButton}>
+          <Text style={styles.forgotText}>Lupa kata sandi?</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.link}>Belum punya akun? Daftar</Text>
+        {/* Login Button */}
+        <TouchableOpacity
+          style={styles.loginButton}
+          onPress={handleLogin}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.loginButtonText}>Masuk ke OBSENSE</Text>
+          <Icon name="arrow-forward" size={20} color={Colors.white} />
         </TouchableOpacity>
-      </View>
 
-      <CustomAlert
-        visible={alertVisible}
-        type={alertType}
-        title={alertTitle}
-        message={alertMessage}
-        buttons={alertButtons}
-        onDismiss={() => setAlertVisible(false)}
-      />
+        {/* Register Link */}
+        <View style={styles.registerContainer}>
+          <Text style={styles.registerText}>Belum punya akun? </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+            <Text style={styles.registerLink}>Daftar</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </>
   );
 }

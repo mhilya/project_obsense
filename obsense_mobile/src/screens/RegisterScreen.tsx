@@ -5,171 +5,154 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  StatusBar,
+  Pressable,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { registerUser } from '../utils/authStorage';
-import CustomDatePicker from '../components/CustomDatePicker';
-import CustomAlert, { AlertType, AlertButton } from '../components/CustomAlert';
-import styles from '../styles/RegisterScreen';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import Logo from '../components/Logo';
+import { Colors } from '../theme';
+import styles from '../styles/RegisterScreen.styles';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
-const GENDER_OPTIONS = ['Laki-laki', 'Perempuan'];
-
 export default function RegisterScreen({ navigation }: Props) {
-  const [username, setUsername] = useState('');
   const [nama, setNama] = useState('');
   const [email, setEmail] = useState('');
-  const [tanggalLahir, setTanggalLahir] = useState<Date | null>(null);
-  const [gender, setGender] = useState('');
-  const [alamat, setAlamat] = useState('');
   const [password, setPassword] = useState('');
-
-  // Alert state
-  const [alertVisible, setAlertVisible] = useState(false);
-  const [alertType, setAlertType] = useState<AlertType>('info');
-  const [alertTitle, setAlertTitle] = useState('');
-  const [alertMessage, setAlertMessage] = useState('');
-  const [alertButtons, setAlertButtons] = useState<AlertButton[]>([{ text: 'OK' }]);
-
-  const showAlert = (
-    type: AlertType,
-    title: string,
-    message: string,
-    buttons?: AlertButton[],
-  ) => {
-    setAlertType(type);
-    setAlertTitle(title);
-    setAlertMessage(message);
-    setAlertButtons(buttons ?? [{ text: 'OK' }]);
-    setAlertVisible(true);
-  };
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(false);
 
   const handleRegister = () => {
-    if (
-      !username.trim() ||
-      !nama.trim() ||
-      !email.trim() ||
-      !tanggalLahir ||
-      !gender.trim() ||
-      !alamat.trim() ||
-      !password.trim()
-    ) {
-      showAlert('warning', 'Perhatian', 'Semua field harus diisi.');
-      return;
+    // TODO: Add validation and registration
+    if (agreeTerms) {
+      navigation.replace('Main');
     }
-    if (password.length < 6) {
-      showAlert('warning', 'Perhatian', 'Password minimal 6 karakter.');
-      return;
-    }
-    const berhasil = registerUser({ nama, email, password });
-    if (!berhasil) {
-      showAlert('error', 'Gagal', 'Email sudah terdaftar. Gunakan email lain.');
-      return;
-    }
-    showAlert('success', 'Berhasil!', 'Akun berhasil dibuat. Silakan login.', [
-      { text: 'Login Sekarang', onPress: () => navigation.replace('Login') },
-    ]);
   };
 
   return (
     <>
+      <StatusBar barStyle="dark-content" />
       <ScrollView
-        contentContainerStyle={styles.container}
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>Daftar Akun</Text>
-
-        <Text style={styles.label}>Username</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Masukkan username"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-        />
-
-        <Text style={styles.label}>Nama Lengkap</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Masukkan nama lengkap"
-          value={nama}
-          onChangeText={setNama}
-        />
-
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Masukkan email"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-
-        <CustomDatePicker
-          label="Tanggal Lahir"
-          placeholder="Pilih tanggal lahir"
-          value={tanggalLahir}
-          onChange={setTanggalLahir}
-          maxDate={new Date()}
-        />
-
-        <Text style={styles.label}>Gender</Text>
-        <View style={styles.genderRow}>
-          {GENDER_OPTIONS.map(opt => (
-            <TouchableOpacity
-              key={opt}
-              style={[styles.genderBtn, gender === opt && styles.genderBtnActive]}
-              onPress={() => setGender(opt)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.genderText, gender === opt && styles.genderTextActive]}>
-                {opt}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        {/* Brand Logo */}
+        <View style={styles.brandContainer}>
+          <Logo size="large" showText={true} />
         </View>
 
-        <Text style={styles.label}>Alamat</Text>
-        <TextInput
-          style={[styles.input, styles.inputMultiline]}
-          placeholder="Masukkan alamat lengkap"
-          value={alamat}
-          onChangeText={setAlamat}
-          multiline
-          numberOfLines={3}
-          textAlignVertical="top"
-        />
+        {/* Welcome Text */}
+        <View style={styles.welcomeSection}>
+          <Text style={styles.eyebrow}>MULAI PERJALANAN SEHATMU</Text>
+          <Text style={styles.title}>Buat akun OBSENSE</Text>
+          <Text style={styles.subtitle}>
+            Isi data singkat berikut untuk membuat akun baru.
+          </Text>
+        </View>
 
-        <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Minimal 6 karakter"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        {/* Name Input */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Nama lengkap</Text>
+          <View style={styles.inputContainer}>
+            <Icon name="person-outline" size={20} color={Colors.textMuted} />
+            <TextInput
+              style={styles.input}
+              placeholder="Nama lengkap"
+              placeholderTextColor={Colors.textMuted}
+              value={nama}
+              onChangeText={setNama}
+              autoCapitalize="words"
+            />
+          </View>
+        </View>
 
-        <TouchableOpacity style={styles.button} onPress={handleRegister}>
-          <Text style={styles.buttonText}>Daftar</Text>
+        {/* Email Input */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Email</Text>
+          <View style={styles.inputContainer}>
+            <Icon name="mail-outline" size={20} color={Colors.textMuted} />
+            <TextInput
+              style={styles.input}
+              placeholder="nama@email.com"
+              placeholderTextColor={Colors.textMuted}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        </View>
+
+        {/* Password Input */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Kata sandi</Text>
+          <View style={styles.inputContainer}>
+            <Icon name="lock-outline" size={20} color={Colors.textMuted} />
+            <TextInput
+              style={styles.input}
+              placeholder="Minimal 8 karakter"
+              placeholderTextColor={Colors.textMuted}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeButton}
+            >
+              <Text style={styles.eyeButtonText}>
+                {showPassword ? 'Sembunyikan' : 'Lihat'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Terms Checkbox */}
+        <Pressable
+          style={styles.termsContainer}
+          onPress={() => setAgreeTerms(!agreeTerms)}
+        >
+          <View
+            style={[styles.checkbox, agreeTerms && styles.checkboxChecked]}
+          >
+            {agreeTerms && <Icon name="check" size={16} color={Colors.white} />}
+          </View>
+          <Text style={styles.termsText}>
+            Saya menyetujui{' '}
+            <Text style={styles.termsLink}>Syarat Penggunaan</Text> dan{' '}
+            <Text style={styles.termsLink}>Kebijakan Privasi</Text> OBSENSE.
+          </Text>
+        </Pressable>
+
+        {/* Register Button */}
+        <TouchableOpacity
+          style={[
+            styles.registerButton,
+            !agreeTerms && styles.registerButtonDisabled,
+          ]}
+          onPress={handleRegister}
+          disabled={!agreeTerms}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.registerButtonText}>Daftar sekarang</Text>
+          <Icon name="arrow-forward" size={20} color={Colors.white} />
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.link}>Sudah punya akun? Login</Text>
-        </TouchableOpacity>
+        {/* Login Link */}
+        <View style={styles.loginContainer}>
+          <Text style={styles.loginText}>Sudah punya akun? </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.loginLink}>Masuk</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
-
-      <CustomAlert
-        visible={alertVisible}
-        type={alertType}
-        title={alertTitle}
-        message={alertMessage}
-        buttons={alertButtons}
-        onDismiss={() => setAlertVisible(false)}
-      />
     </>
   );
 }

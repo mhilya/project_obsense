@@ -2,21 +2,79 @@ import { StyleSheet } from 'react-native';
 import { Colors, FontSize, FontWeight, Radius, Shadow, Spacing } from '../theme';
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.white,
   },
-  scrollContent: {
-    padding: Spacing.xl,
+
+  // ── Header ────────────────────────────────────────────────
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.xl + Spacing.sm, // Menambahkan padding top agar tombol lebih rendah
+    paddingBottom: Spacing.base,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.backgroundDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  logoGradient: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.extrabold,
+    color: Colors.textPrimary,
+    letterSpacing: 0.5,
+  },
+  notificationButton: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.backgroundDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ── Scroll View ───────────────────────────────────────────
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: Spacing.base,
     paddingBottom: Spacing.xxxl,
   },
+
+  // ── Avatar Card ───────────────────────────────────────────
   avatarCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.white,
     borderRadius: Radius.xl,
     alignItems: 'center',
     padding: Spacing.xl,
     marginBottom: Spacing.base,
     ...Shadow.md,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   avatarCircle: {
     width: 80,
@@ -59,11 +117,14 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.white,
     borderRadius: Radius.xl,
     padding: Spacing.base,
-    marginBottom: Spacing.xl,
-    ...Shadow.sm,
+    marginBottom: Spacing.lg,
+    ...Shadow.md,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   statItem: {
     flex: 1,
@@ -98,6 +159,142 @@ const styles = StyleSheet.create({
   },
   logoutWrapper: {
     marginTop: Spacing.xl,
+  },
+  // Info card styles
+  infoCard: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    padding: Spacing.base,
+    marginBottom: Spacing.base,
+    ...Shadow.md,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+  },
+  infoContent: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  infoLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    fontWeight: FontWeight.medium,
+    marginBottom: Spacing.xs - 2,
+  },
+  infoValue: {
+    fontSize: FontSize.md,
+    color: Colors.textPrimary,
+    fontWeight: FontWeight.semibold,
+  },
+  infoDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginHorizontal: Spacing.base,
+  },
+  // Edit mode styles
+  editTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xl,
+    textAlign: 'center',
+  },
+  editForm: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    padding: Spacing.xl,
+    ...Shadow.md,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  label: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    marginBottom: Spacing.xs,
+    color: Colors.textPrimary,
+    letterSpacing: 0.2,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.base,
+    fontSize: FontSize.base,
+    marginBottom: Spacing.base,
+    backgroundColor: Colors.backgroundDark,
+    color: Colors.textPrimary,
+  },
+  inputMultiline: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm + 2,
+    marginBottom: Spacing.base,
+  },
+  genderBtn: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+  },
+  genderBtnActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  genderText: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  genderTextActive: {
+    color: Colors.textOnPrimary,
+    fontWeight: FontWeight.bold,
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  editButton: {
+    flex: 1,
+    paddingVertical: Spacing.base,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editButtonCancel: {
+    backgroundColor: Colors.background,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  editButtonSave: {
+    backgroundColor: Colors.primary,
+  },
+  editButtonDisabled: {
+    opacity: 0.6,
+  },
+  editButtonTextCancel: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.bold,
+    color: Colors.textSecondary,
+  },
+  editButtonTextSave: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.bold,
+    color: Colors.textOnPrimary,
   },
 });
 

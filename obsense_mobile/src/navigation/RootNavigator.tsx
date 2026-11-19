@@ -3,8 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
-import HomeScreen from '../screens/HomeScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import BottomTabNavigator from './BottomTabNavigator';
 import { RootStackParamList } from '../types/navigation';
 import { Colors } from '../theme';
 
@@ -33,14 +32,9 @@ const RootNavigator = (): React.JSX.Element => (
       options={{ headerShown: false }}
     />
     <Stack.Screen
-      name="Home"
-      component={HomeScreen}
+      name="Main"
+      component={BottomTabNavigator}
       options={{ headerShown: false }}
-    />
-    <Stack.Screen
-      name="Profile"
-      component={ProfileScreen}
-      options={{ title: 'Profil Saya' }}
     />
   </Stack.Navigator>
 );
