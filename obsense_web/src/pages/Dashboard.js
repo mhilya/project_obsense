@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
 import storageService from '../mock/storageService';
+import dashboardService, { EMPTY_STATS } from '../services/dashboardService';
 import DonutChart from '../components/charts/DonutChart';
 import TrendLineChart from '../components/charts/TrendLineChart';
 import {
@@ -21,11 +22,14 @@ import {
 
 export const Dashboard = () => {
   const { user } = useAuth();
-  const [stats, setStats] = useState(() => storageService.getDashboardStats());
+  const [stats, setStats] = useState(EMPTY_STATS);
   const recentLogs = storageService.getAuditLogs().slice(0, 4);
 
   useEffect(() => {
-    setStats(storageService.getDashboardStats());
+    dashboardService
+      .getStats()
+      .then(setStats)
+      .catch((err) => console.error('Gagal memuat statistik dashboard:', err));
   }, []);
 
   // Time-based greeting
@@ -44,36 +48,47 @@ export const Dashboard = () => {
     year: 'numeric'
   }).format(new Date());
 
+  const bmiCategory =
+    stats.avgBmi <= 0
+      ? 'Belum ada data'
+      : stats.avgBmi < 18.5
+        ? 'Underweight'
+        : stats.avgBmi < 25
+          ? 'Kategori Normal'
+          : stats.avgBmi < 30
+            ? 'Kategori Overweight'
+            : 'Kategori Obesitas';
+
   const statCards = [
     {
       title: 'Total Pasien Terdaftar',
       value: stats.totalUsers,
       meta: 'Pasien Aktif',
-      change: '+2 minggu ini',
+      change: stats.totalUsers > 0 ? `${stats.totalUsers} pasien aktif` : 'Belum ada pasien',
       icon: Users,
       color: '#3b82f6',
-      progress: 75,
+      progress: stats.totalUsers > 0 ? Math.min(100, stats.totalUsers * 10) : 0,
       link: '/users'
     },
     {
       title: 'Rata-rata BMI Populasi',
       value: `${stats.avgBmi}`,
       unit: 'kg/m²',
-      meta: 'Kategori Overweight',
+      meta: bmiCategory,
       change: 'Normal: 18.5 - 24.9',
       icon: Scale,
       color: '#f59e0b',
-      progress: 68,
+      progress: stats.avgBmi > 0 ? Math.min(100, Math.round((stats.avgBmi / 40) * 100)) : 0,
       link: '/analytics'
     },
     {
       title: 'Kasus Risiko Tinggi',
       value: stats.highRiskCount,
       meta: 'Tipe Obesitas I, II & III',
-      change: 'Perlu intervensi gizi',
+      change: stats.highRiskCount > 0 ? 'Perlu intervensi gizi' : 'Tidak ada kasus',
       icon: AlertTriangle,
       color: '#ef4444',
-      progress: 40,
+      progress: stats.totalUsers > 0 ? Math.round((stats.highRiskCount / stats.totalUsers) * 100) : 0,
       link: '/users'
     },
     {
@@ -91,7 +106,7 @@ export const Dashboard = () => {
   const quickModules = [
     {
       name: 'Manajemen User',
-      desc: '10 Pasien terdaftar • Antropometri',
+      desc: `${stats.totalUsers} Pasien terdaftar • Antropometri`,
       path: '/users',
       icon: Users,
       color: '#3b82f6'
@@ -151,32 +166,34 @@ export const Dashboard = () => {
       </div>
 
       {/* Critical Alert Banner */}
-      <div className="rounded-2xl border border-amber-500/30 bg-amber-50/90 p-4 sm:p-5 shadow-sm dark:border-amber-500/25 dark:bg-amber-950/30 transition-all">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
-              <AlertTriangle size={20} />
+      {stats.topCriticalUser && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-50/90 p-4 sm:p-5 shadow-sm dark:border-amber-500/25 dark:bg-amber-950/30 transition-all">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-amber-950 dark:text-amber-200">
+                  Perhatian Medis: Kasus Risiko {stats.topCriticalUser.risk_level === 'Critical' ? 'Kritis' : 'Tinggi'} Terdeteksi
+                </h4>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
+                  Pasien <strong>{stats.topCriticalUser.name}{stats.topCriticalUser.age ? ` (${stats.topCriticalUser.age} Thn)` : ''}</strong> terdeteksi memiliki BMI <strong>{stats.topCriticalUser.bmi ?? '-'} kg/m²</strong> ({(stats.topCriticalUser.obesity_class || 'Obesitas').replace(/_/g, ' ')}). Disarankan verifikasi evaluasi klinis.
+                </p>
+              </div>
             </div>
-            <div className="space-y-1">
-              <h4 className="text-sm font-bold text-amber-950 dark:text-amber-200">
-                Perhatian Medis: Kasus Obesitas Morbid Terdeteksi
-              </h4>
-              <p className="text-xs text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
-                Pasien <strong>Dimas Prasetyo (24 Thn)</strong> terdeteksi memiliki BMI <strong>41.4 kg/m²</strong> (Obesity Type III) dengan screen time tinggi (&gt;5 jam/hari). Disarankan verifikasi evaluasi klinis.
-              </p>
+            <div className="flex justify-start md:justify-end shrink-0 w-full md:w-auto pt-1 md:pt-0">
+              <Link
+                to="/evaluations"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm shadow-amber-600/20 transition-all hover:bg-amber-700 active:scale-[0.98]"
+              >
+                <span>Tinjau Pasien Sekarang</span>
+                <ArrowRight size={14} />
+              </Link>
             </div>
-          </div>
-          <div className="flex justify-start md:justify-end shrink-0 w-full md:w-auto pt-1 md:pt-0">
-            <Link
-              to="/evaluations"
-              className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm shadow-amber-600/20 transition-all hover:bg-amber-700 active:scale-[0.98]"
-            >
-              <span>Tinjau Pasien Sekarang</span>
-              <ArrowRight size={14} />
-            </Link>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 4 Interactive Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

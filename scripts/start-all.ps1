@@ -4,6 +4,8 @@ $root = Split-Path -Parent $PSScriptRoot
 
 $services = @(
   @{ name = 'auth-service'; dir = "$root\services\auth-service" },
+  @{ name = 'user-service'; dir = "$root\services\user-service" },
+  @{ name = 'assessment-service'; dir = "$root\services\assessment-service" },
   @{ name = 'gateway';      dir = "$root\services\gateway" }
   # Tambahkan service lain di sini setelah dibuat
 )
