@@ -142,36 +142,90 @@ obsense_mobile (RN)  ─┘       │
 
 ---
 
-## 4. Checklist Setup Saat Pindah ke Device Baru
+## 4. Panduan Setup & Melanjutkan Kerja untuk Tim (Pull dari `feat/microservices`)
 
-Karena file `.env` dan folder `node_modules/` tidak masuk ke Git (`.gitignore`), lakukan langkah ini di device baru:
+Bagian ini ditujukan bagi rekan tim (Backend, Web, maupun Mobile) yang ingin menarik kode terbaru dari branch `feat/microservices` dan melanjutkan pengerjaan Issue berikutnya.
 
-1. **Pull branch terbaru:**
+### A. Alur Git yang Disarankan
+Agar tidak terjadi konflik saat bekerja paralel, selalu pull terbaru dari `feat/microservices`, lalu buat branch baru sesuai nomor Issue yang Anda kerjakan:
+```powershell
+git fetch origin
+git switch feat/microservices
+git pull origin feat/microservices
+
+# Buat branch fitur sendiri dari feat/microservices (contoh):
+git switch -c feat/issue-4-mobile-auth
+# atau untuk web/backend:
+# git switch -c feat/issue-3-web-ml
+```
+Setelah selesai mengerjakan Issue, push branch Anda lalu buat Pull Request (PR) dengan target ke branch `feat/microservices`.
+
+### B. Prasyarat Lokal
+Pastikan perangkat sudah terpasang dan berjalan:
+1. **Node.js** (≥ 18 / 22)
+2. **MySQL Server / XAMPP / Laragon** dalam kondisi **menyala** (port default `3306`)
+3. **Python 3** + instal dependency ML sekali di awal:
    ```powershell
-   git fetch origin
-   git switch feat/microservices
-   git pull origin feat/microservices
+   pip install -r obsense_ml/requirements.txt
    ```
-2. **Pastikan prasyarat terpasang:**
-   - Node.js (≥ 18 / 22), MySQL Server / XAMPP dalam kondisi menyala, dan Python 3 (instal dependency ML dengan `pip install -r obsense_ml/requirements.txt`).
-3. **Buat & sesuaikan file `.env` tiap service** (salin dari `.env.example`):
-   - `services/auth-service/.env` (`PORT=4001`, `DB_NAME=auth_db`, isi `DB_PASSWORD`, samakan `JWT_SECRET`)
-   - `services/user-service/.env` (`PORT=4002`, `DB_NAME=user_db`, isi `DB_PASSWORD`, **samakan `JWT_SECRET`**)
-   - `services/assessment-service/.env` (`PORT=4003`, `DB_NAME=assessment_db`, isi `DB_PASSWORD`, **samakan `JWT_SECRET`**, `USER_SERVICE_URL=http://localhost:4002`, `PREDICTION_SERVICE_URL=http://localhost:5001`)
-   - `services/gateway/.env` (`PORT=4000`, `AUTH_SERVICE_URL`, `USER_SERVICE_URL`, `ASSESSMENT_SERVICE_URL`, `PREDICTION_SERVICE_URL`)
-   *(Atau jalankan `.\scripts\start-all.ps1` sekali agar `.env` dibuat otomatis dari `.env.example`, lalu edit `DB_PASSWORD` dan `JWT_SECRET`, lalu restart service).*
-4. **Jalankan semua service backend (4 Node.js + 1 Python ML):**
-   ```powershell
-   .\scripts\start-all.ps1
-   ```
-   Pastikan `http://localhost:4000/health` menampilkan `gateway` beserta route `/api/auth`, `/api/users`, `/api/cycles`, `/api/assessments`, `/api/predict`.
-5. **Jalankan frontend web:**
-   ```powershell
-   cd obsense_web
-   npm install
-   npm start
-   ```
-   Login superadmin awal: `superadmin@obsense.com` / `admin123`.
+   *(Catatan: File biner model `obsense_ml/models/*.joblib` tidak ikut di-push ke Git. Saat `prediction-service` pertama kali dijalankan, model akan dilatih otomatis dari `ObesityDataSet_raw_and_data_sinthetic.csv` dalam ~10–15 detik).*
+
+### C. Konfigurasi File `.env` (Wajib di Lokal)
+Karena file `.env` dan `node_modules/` diabaikan oleh `.gitignore`, salin `.env.example` menjadi `.env` di tiap service berikut (atau jalankan `.\scripts\start-all.ps1` sekali agar `.env` dibuat otomatis, lalu sesuaikan isinya):
+
+| Service | File `.env` | Yang Wajib Disesuaikan |
+|---|---|---|
+| `auth-service` | `services/auth-service/.env` | `DB_PASSWORD` sesuai MySQL lokal, `JWT_SECRET` |
+| `user-service` | `services/user-service/.env` | `DB_PASSWORD` sama, **`JWT_SECRET` wajib sama persis** |
+| `assessment-service` | `services/assessment-service/.env` | `DB_PASSWORD` sama, **`JWT_SECRET` wajib sama persis**, `USER_SERVICE_URL=http://localhost:4002`, `PREDICTION_SERVICE_URL=http://localhost:5001` |
+| `gateway` | `services/gateway/.env` | Default port `4000`, pastikan semua `*_SERVICE_URL` termasuk `PREDICTION_SERVICE_URL=http://localhost:5001` aktif |
+
+> **Penting:** Jangan pernah menjalankan server monolith lama di `obsense_web/server/` agar tidak bentrok port atau database. Database (`auth_db`, `user_db`, `assessment_db`) beserta seluruh tabelnya dibuat otomatis oleh masing-masing service saat startup.
+
+### D. Menjalankan Semua Service Backend (4 Node.js + 1 Python ML)
+Jalankan dari folder root proyek:
+```powershell
+.\scripts\start-all.ps1
+```
+Jika PowerShell memblokir eksekusi skrip (*Execution Policy*), jalankan:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-all.ps1
+```
+Perintah ini akan membuka 5 jendela PowerShell (`auth-service`, `user-service`, `assessment-service`, `prediction-service`, dan `gateway`). **Biarkan kelimanya tetap terbuka.**
+
+**Verifikasi Backend Berhasil Jalan:**
+- Buka `http://localhost:4000/health` → pastikan muncul `"status": "OK"` dengan 5 route: `/api/auth`, `/api/users`, `/api/cycles`, `/api/assessments`, `/api/predict`.
+- Buka `http://localhost:5001/health` → pastikan muncul `"models_loaded": true`.
+
+### E. Menjalankan Frontend Web (`obsense_web`)
+```powershell
+cd obsense_web
+npm install
+npm start
+```
+- Akun Super Admin bawaan: `superadmin@obsense.com` / `admin123`.
+
+### F. Menjalankan & Menghubungkan Aplikasi Mobile (`obsense_mobile`)
+1. Pastikan seluruh service backend menyala di port `4000`.
+2. Atur Base URL di aplikasi mobile:
+   - **Android Emulator:** `http://10.0.2.2:4000/api`
+   - **HP Android Fisik via USB:** jalankan `adb reverse tcp:4000 tcp:4000` di terminal, lalu gunakan `http://localhost:4000/api`
+   - **iOS Simulator:** `http://localhost:4000/api`
+3. Baca spesifikasi endpoint lengkap di [PANDUAN_FASE_0_2_MOBILE.md](./PANDUAN_FASE_0_2_MOBILE.md) dan [PANDUAN_FASE_3_MOBILE.md](./PANDUAN_FASE_3_MOBILE.md).
+
+### G. Daftar Issue yang Siap Dilanjutkan
+| Issue | Target Tim | Fokus Pekerjaan |
+|---|---|---|
+| **Issue #3** | Web (`obsense_web`) | Sambungkan `FeatureBarChart`, `CorrelationHeatmap`, & `ReportsAnalytics` ke `GET /api/predict/metadata`, tambah toggle Skenario A vs B, dan tombol trigger `POST /api/assessments/predict`. |
+| **Issue #4** | Mobile (`obsense_mobile`) | Sambungkan Register, Login, cek sesi `/api/auth/me`, dan profil antropometri (`GET/PUT /api/users/me` termasuk `smoke`) ke API Gateway `:4000`. |
+| **Issue #5** | Mobile (`obsense_mobile`) | Layar siklus 14 hari (`GET /api/cycles/current`, `POST /api/cycles`) dan form input log harian FFQ (`POST /api/cycles/daily-logs` termasuk `ncp`). |
+| **Issue #6** | Mobile (`obsense_mobile`) | Layar hasil prediksi obesitas dual-scenario (Skenario A + Skenario B), 5 faktor SHAP, dan rekomendasi (`POST /api/assessments/predict`, `GET /api/assessments`). |
+| **Issue #7** | Backend & Web | Bangun `admin-service` (`:4005`) & `audit-service` (`:4006`), sambungkan 3 halaman web terakhir (`AdminEvaluations`, `SystemConfig`, `AuditLogs`), dan hapus `obsense_web/server/`. |
+
+### H. Troubleshooting Cepat
+- **`Access denied for user 'root'@'localhost'`:** Password MySQL di file `.env` service belum sesuai dengan MySQL lokal Anda.
+- **Error `401 Token tidak valid` saat memanggil `/api/users` atau `/api/cycles`:** Nilai `JWT_SECRET` di `.env` `auth-service`, `user-service`, dan `assessment-service` berbeda. Samakan lalu restart service.
+- **Error `502 Bad Gateway`:** Service tujuan pada prefix route tersebut belum menyala atau crash — cek jendela PowerShell service terkait.
 
 ---
 
