@@ -7,10 +7,11 @@ const CAEC = ['no', 'Sometimes', 'Frequently', 'Always'];
 const MTRANS = ['Automobile', 'Motorbike', 'Bike', 'Public_Transportation', 'Walking'];
 
 // Validasi rentang nilai kuesioner harian. Return pesan error atau null.
-const validateLogFields = ({ faf, tue, fcvc, ch2o, caec, calc, mtrans }) => {
+const validateLogFields = ({ faf, tue, fcvc, ncp = 3, ch2o, caec, calc, mtrans }) => {
   if (![0, 1, 2, 3].includes(Number(faf))) return 'faf harus 0–3.';
   if (![0, 1, 2].includes(Number(tue))) return 'tue harus 0–2.';
   if (![1, 2, 3].includes(Number(fcvc))) return 'fcvc harus 1–3.';
+  if (![1, 2, 3, 4].includes(Number(ncp))) return 'ncp (jumlah makan utama) harus 1–4.';
   if (ch2o === '' || ch2o === null || Number.isNaN(Number(ch2o)) || Number(ch2o) < 0 || Number(ch2o) > 9.9) {
     return 'ch2o (liter) harus 0–9.9.';
   }
@@ -31,6 +32,7 @@ const fmtLog = (l) => ({
   faf: Number(l.faf),
   tue: Number(l.tue),
   fcvc: Number(l.fcvc),
+  ncp: Number(l.ncp ?? 3),
   favc: Boolean(l.favc),
   ch2o: Number(l.ch2o),
   scc: Boolean(l.scc),
@@ -50,7 +52,7 @@ const expireOld = async (userId = null) => {
 // Hitung ulang completion_rate, status, dan ringkasan fitur sebuah siklus
 const refreshCycle = async (cycleId) => {
   const [logs] = await pool.query(
-    'SELECT faf, tue, fcvc, favc, ch2o FROM daily_logs WHERE cycle_id = ? AND deleted_at IS NULL',
+    'SELECT faf, tue, fcvc, ncp, favc, ch2o, caec, scc, calc, mtrans FROM daily_logs WHERE cycle_id = ? AND deleted_at IS NULL',
     [cycleId]
   );
   const n = logs.length;
@@ -60,20 +62,27 @@ const refreshCycle = async (cycleId) => {
   let aggregated = null;
   if (n > 0) {
     const mean = (k) => Number((logs.reduce((s, l) => s + Number(l[k]), 0) / n).toFixed(2));
-    const counts = {};
-    logs.forEach((l) => {
-      counts[l.fcvc] = (counts[l.fcvc] || 0) + 1;
-    });
-    const fcvcMode = Number(
-      Object.keys(counts).sort((a, b) => counts[b] - counts[a] || Number(b) - Number(a))[0]
-    );
+    const mode = (k, numeric = false) => {
+      const counts = {};
+      logs.forEach((l) => {
+        const val = String(l[k]);
+        counts[val] = (counts[val] || 0) + 1;
+      });
+      const top = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || (numeric ? Number(b) - Number(a) : 0))[0];
+      return numeric ? Number(top) : top;
+    };
     aggregated = {
       logged_days: n,
       faf_mean: mean('faf'),
       tue_mean: mean('tue'),
-      fcvc_mode: fcvcMode,
+      fcvc_mode: mode('fcvc', true),
+      ncp_mean: mean('ncp'),
       favc_ratio: Number((logs.filter((l) => l.favc).length / n).toFixed(2)),
       ch2o_mean: mean('ch2o'),
+      caec_mode: mode('caec'),
+      scc_mode: logs.filter((l) => l.scc).length / n >= 0.5,
+      calc_mode: mode('calc'),
+      mtrans_mode: mode('mtrans'),
     };
   }
 
@@ -252,25 +261,26 @@ exports.createDailyLog = async (req, res) => {
     const faf = b.faf ?? 0;
     const tue = b.tue ?? 0;
     const fcvc = b.fcvc ?? 1;
+    const ncp = b.ncp ?? 3;
     const ch2o = b.ch2o ?? 1.5;
     const caec = b.caec ?? 'Sometimes';
     const calc = b.calc ?? 'no';
     const mtrans = b.mtrans ?? 'Public_Transportation';
 
-    const validationError = validateLogFields({ faf, tue, fcvc, ch2o, caec, calc, mtrans });
+    const validationError = validateLogFields({ faf, tue, fcvc, ncp, ch2o, caec, calc, mtrans });
     if (validationError) return res.status(400).json({ message: validationError });
 
     await pool.query(
       `INSERT INTO daily_logs
-         (cycle_id, user_id, log_date, day_number, faf, tue, fcvc, favc, ch2o, caec, scc, calc, mtrans, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (cycle_id, user_id, log_date, day_number, faf, tue, fcvc, ncp, favc, ch2o, caec, scc, calc, mtrans, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
-         faf = VALUES(faf), tue = VALUES(tue), fcvc = VALUES(fcvc), favc = VALUES(favc),
+         faf = VALUES(faf), tue = VALUES(tue), fcvc = VALUES(fcvc), ncp = VALUES(ncp), favc = VALUES(favc),
          ch2o = VALUES(ch2o), caec = VALUES(caec), scc = VALUES(scc), calc = VALUES(calc),
          mtrans = VALUES(mtrans), notes = VALUES(notes), deleted_at = NULL`,
       [
         cycle.id, userId, logDate, dayNumber,
-        Number(faf), Number(tue), Number(fcvc), b.favc ? 1 : 0, Number(ch2o),
+        Number(faf), Number(tue), Number(fcvc), Number(ncp), b.favc ? 1 : 0, Number(ch2o),
         caec, b.scc ? 1 : 0, calc, mtrans, b.notes || null,
       ]
     );
@@ -316,6 +326,7 @@ exports.updateDailyLog = async (req, res) => {
       faf: b.faf !== undefined ? b.faf : log.faf,
       tue: b.tue !== undefined ? b.tue : log.tue,
       fcvc: b.fcvc !== undefined ? b.fcvc : log.fcvc,
+      ncp: b.ncp !== undefined ? b.ncp : (log.ncp ?? 3),
       favc: b.favc !== undefined ? (b.favc ? 1 : 0) : log.favc,
       ch2o: b.ch2o !== undefined ? b.ch2o : log.ch2o,
       caec: b.caec !== undefined ? b.caec : log.caec,
@@ -330,10 +341,10 @@ exports.updateDailyLog = async (req, res) => {
 
     await pool.query(
       `UPDATE daily_logs
-       SET faf = ?, tue = ?, fcvc = ?, favc = ?, ch2o = ?, caec = ?, scc = ?, calc = ?, mtrans = ?, notes = ?
+       SET faf = ?, tue = ?, fcvc = ?, ncp = ?, favc = ?, ch2o = ?, caec = ?, scc = ?, calc = ?, mtrans = ?, notes = ?
        WHERE id = ?`,
       [
-        Number(next.faf), Number(next.tue), Number(next.fcvc), next.favc, Number(next.ch2o),
+        Number(next.faf), Number(next.tue), Number(next.fcvc), Number(next.ncp), next.favc, Number(next.ch2o),
         next.caec, next.scc, next.calc, next.mtrans, next.notes, log.id,
       ]
     );

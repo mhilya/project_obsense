@@ -19,6 +19,7 @@ const format = (u) => {
     obesity_class: cls.obesity_class,
     risk_level: cls.risk_level,
     family_history_with_overweight: Boolean(u.family_history_with_overweight),
+    smoke: Boolean(u.smoke),
     status: u.status,
     deleted_at: u.deleted_at,
     created_at: u.created_at,
@@ -91,21 +92,22 @@ exports.upsertMe = async (req, res) => {
       family_history: b.family_history_with_overweight !== undefined
         ? (b.family_history_with_overweight ? 1 : 0)
         : prev ? prev.family_history_with_overweight : 0,
+      smoke: b.smoke !== undefined ? (b.smoke ? 1 : 0) : prev ? prev.smoke : 0,
     };
 
     if (prev) {
       await pool.query(
         `UPDATE users SET name=?, email=?, phone=?, gender=?, birth_date=?, age=?, height=?, weight=?, address=?,
-         family_history_with_overweight=?, deleted_at=NULL WHERE id=?`,
+         family_history_with_overweight=?, smoke=?, deleted_at=NULL WHERE id=?`,
         [data.name, data.email, data.phone, data.gender, data.birth_date, data.age, data.height, data.weight,
-          data.address, data.family_history, id]
+          data.address, data.family_history, data.smoke, id]
       );
     } else {
       await pool.query(
-        `INSERT INTO users (id, name, email, phone, gender, birth_date, age, height, weight, address, family_history_with_overweight)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO users (id, name, email, phone, gender, birth_date, age, height, weight, address, family_history_with_overweight, smoke)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, data.name, data.email, data.phone, data.gender, data.birth_date, data.age, data.height, data.weight,
-          data.address, data.family_history]
+          data.address, data.family_history, data.smoke]
       );
     }
 
@@ -182,10 +184,10 @@ exports.createUser = async (req, res) => {
 
     const age = b.age ? Number(b.age) : calcAge(b.birth_date);
     const [result] = await pool.query(
-      `INSERT INTO users (name, email, phone, gender, birth_date, age, height, weight, address, family_history_with_overweight, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (name, email, phone, gender, birth_date, age, height, weight, address, family_history_with_overweight, smoke, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [b.name, b.email, b.phone || null, gender, b.birth_date || null, age, Number(b.height), Number(b.weight),
-        b.address || null, b.family_history_with_overweight ? 1 : 0, b.status === 'inactive' ? 'inactive' : 'active']
+        b.address || null, b.family_history_with_overweight ? 1 : 0, b.smoke ? 1 : 0, b.status === 'inactive' ? 'inactive' : 'active']
     );
     const [saved] = await pool.query('SELECT * FROM users WHERE id = ?', [result.insertId]);
     return res.status(201).json({ success: true, message: 'Pengguna berhasil ditambahkan.', data: format(saved[0]) });
@@ -215,7 +217,7 @@ exports.updateUser = async (req, res) => {
 
     await pool.query(
       `UPDATE users SET name=?, email=?, phone=?, gender=?, birth_date=?, age=?, height=?, weight=?, address=?,
-       family_history_with_overweight=?, status=? WHERE id=?`,
+       family_history_with_overweight=?, smoke=?, status=? WHERE id=?`,
       [
         b.name ?? before.name,
         b.email ?? before.email,
@@ -229,6 +231,7 @@ exports.updateUser = async (req, res) => {
         b.family_history_with_overweight !== undefined
           ? (b.family_history_with_overweight ? 1 : 0)
           : before.family_history_with_overweight,
+        b.smoke !== undefined ? (b.smoke ? 1 : 0) : before.smoke,
         b.status ?? before.status,
         req.params.id,
       ]

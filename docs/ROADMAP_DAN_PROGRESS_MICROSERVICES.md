@@ -32,12 +32,12 @@ obsense_mobile (RN)  ─┘       │
 
 ---
 
-## 2. Fase yang Sudah Selesai (Fase 0 – Fase 3)
+## 2. Fase yang Sudah Selesai (Fase 0 – Fase 4B / Issue #1 & #2)
 
 ### Fase 0 — Persiapan Database, Runner Lokal, & Pembersihan Data Dummy
 - `scripts/init-databases.sql`: DDL untuk membuat 5 database terpisah (`auth_db`, `user_db`, `assessment_db`, `admin_db`, `audit_db`).
-- `scripts/start-all.ps1`: skrip PowerShell untuk menjalankan semua service lokal di jendela terpisah (otomatis `npm install` dan menyalin `.env.example` ke `.env` bila belum ada).
-- `.gitignore`: mengabaikan `node_modules/`, `.env` (kecuali `!.env.example`), log, build output, serta cache/venv Python.
+- `scripts/start-all.ps1`: skrip PowerShell untuk menjalankan semua service lokal (Node.js & Python) di jendela terpisah (otomatis `npm install` dan menyalin `.env.example` ke `.env` bila belum ada).
+- `.gitignore`: mengabaikan `node_modules/`, `.env` (kecuali `!.env.example`), log, build output, cache/venv Python, serta biner model `obsense_ml/models/*.joblib`.
 - Pembersihan data dummy transaksional di `obsense_web/src/mock/mockData.js` (`INITIAL_USERS`, `INITIAL_ASSESSMENT_CYCLES`, `INITIAL_DAILY_LOGS`, `INITIAL_ASSESSMENTS`, `INITIAL_ADMIN_EVALUATIONS`, `INITIAL_AUDIT_LOGS`, `INITIAL_LOGIN_ATTEMPTS`, `RISK_TREND_DATA` menjadi `[]`).
 
 ### Fase 1 — `auth-service` (`services/auth-service`, Port `4001`, DB `auth_db`)
@@ -51,7 +51,7 @@ obsense_mobile (RN)  ─┘       │
   - Manajemen admin khusus `super_admin`: `GET /api/auth/admins`, `POST /api/auth/admins`, `PUT /api/auth/admins/:id`, `POST /api/auth/admins/:id/reset-password`
 
 ### Fase 2 — `gateway` (`services/gateway`, Port `4000`) & Auth Web
-- Proxy berbasis `http-proxy-middleware` dan endpoint `GET /health`.
+- Proxy berbasis `http-proxy-middleware` dan endpoint `GET /health` (kini meneruskan `/api/auth`, `/api/users`, `/api/cycles`, `/api/assessments`, `/api/predict`).
 - Mengubah `API_BASE_URL` di `obsense_web/src/utils/constants.js` ke `http://localhost:4000/api`.
 - Menghubungkan `obsense_web/src/context/AuthContext.js` (login admin & verifikasi sesi `/auth/me`) dan `obsense_web/src/pages/admins/AdminManagement.js` ke `auth-service` lewat gateway.
 
@@ -64,7 +64,7 @@ obsense_mobile (RN)  ─┘       │
   - Tabel `assessment_cycles`, `daily_logs`, `assessments`.
   - Endpoint siklus & log harian: `GET /api/cycles`, `POST /api/cycles`, `GET /api/cycles/current`, `GET /api/cycles/daily-logs`, `POST /api/cycles/daily-logs`, `PUT /api/cycles/daily-logs/:id`, `DELETE /api/cycles/daily-logs/:id`.
   - Otomatis menghitung ulang `completion_rate`, `status` (`in_progress` / `completed` saat 14 hari / `expired` bila melewati `end_date`), dan `aggregated_features` (`faf_mean`, `tue_mean`, `fcvc_mode`, `favc_ratio`, `ch2o_mean`).
-  - Endpoint asesmen: `GET /api/assessments`, `GET /api/assessments/:id`, `POST /api/assessments` *(sementara menerima input manual sebelum dihubungkan ke `prediction-service` di Fase 4)*.
+  - Endpoint asesmen: `GET /api/assessments`, `GET /api/assessments/:id`, `POST /api/assessments`.
 - **Integrasi Frontend Web (`obsense_web`):**
   - Mengisi service layer: `userService.js`, `cycleService.js`, `assessmentService.js`, `dashboardService.js`.
   - Menghubungkan halaman: `Dashboard.js`, `UserList.js`, `UserDetailModal.js`, `UserEditModal.js`, `DataManagement.js`, dan `ReportsAnalytics.js` (serta memperbaiki progress bar & `DonutChart.js` saat data kosong).
@@ -72,18 +72,38 @@ obsense_mobile (RN)  ─┘       │
   - [PANDUAN_FASE_0_2_MOBILE.md](./PANDUAN_FASE_0_2_MOBILE.md)
   - [PANDUAN_FASE_3_MOBILE.md](./PANDUAN_FASE_3_MOBILE.md)
 
+### Fase 4A (Issue #1) — `prediction-service` di `obsense_ml/` (Port `5001`, Python Flask) ✅
+- **`obsense_ml/train.py` & `obsense_ml/requirements.txt`:**
+  - Melatih dua pipeline Random Forest Tuned dari `ObesityDataSet_raw_and_data_sinthetic.csv` (`2111` → `2087` baris bersih setelah hapus `24` duplikat):
+    - **Skenario A (Full Features – 16 fitur):** `models/pipeline_full.joblib` — **Test Accuracy `96.41%` | Weighted F1 `0.9641`**.
+    - **Skenario B (Lifestyle-Only – 14 fitur, tanpa `Height` & `Weight`):** `models/pipeline_lifestyle.joblib` — **Test Accuracy `85.65%` | Weighted F1 `0.856`**.
+  - Menghasilkan `obsense_ml/models/metadata.json` (6 eksperimen A/B testing, global *feature importance* Skenario A & B, dan matriks korelasi).
+- **`obsense_ml/app.py` (Flask + CORS, Port `5001`, stateless/tanpa DB):**
+  - Auto-training bila file `.joblib` belum tersedia di device baru.
+  - `GET /health` — status service & model.
+  - `GET /api/predict/metadata` — metrik eksperimen A/B, *feature importance*, dan korelasi.
+  - `POST /api/predict` — otomatis normalisasi input (`height` cm → meter, `gender`, boolean/rasio → `'yes'`/`'no'`); mengembalikan `bmi`, `scenario_a_full` (bila `height` & `weight` tersedia), `scenario_b_lifestyle` (selalu aktif), `top_shap_factors` (5 faktor SHAP lokal dari Skenario B), dan `recommendations`.
+- **Integrasi Gateway & Runner:**
+  - Proxy `/api/predict` → `http://localhost:5001` aktif di `services/gateway/src/server.js` dan `services/gateway/.env.example`.
+  - `prediction-service` sudah terdaftar di `scripts/start-all.ps1`.
+
+### Fase 4B (Issue #2) — Sinkronisasi Fitur UCI & Trigger Prediksi Antar-Service ✅
+- **`services/user-service` (`user_db`):**
+  - Menambahkan kolom `smoke` (`BOOLEAN DEFAULT FALSE`) pada tabel `users` beserta migrasi otomatis saat startup, dan menyertakannya di `GET/PUT /api/users/me` serta `GET/POST/PUT /api/users`.
+- **`services/assessment-service` (`assessment_db`):**
+  - Menambahkan kolom `ncp` (`1–4`, default `3`) di `daily_logs`, serta `lifestyle_prediction` (JSON), `shap_factors` (JSON), dan `bmi` nullable di `assessments` (dengan migrasi otomatis pada tabel lama).
+  - Memperbarui `refreshCycle()` agar `aggregated_features` merangkum lengkap 14 hari: `logged_days`, `faf_mean`, `tue_mean`, `fcvc_mode`, `ncp_mean`, `favc_ratio`, `ch2o_mean`, `caec_mode`, `scc_mode`, `calc_mode`, `mtrans_mode`.
+  - Menambahkan endpoint **`POST /api/assessments/predict`** yang berkomunikasi antar-service (mengambil profil dari `user-service` + agregasi siklus dari `assessment_db`, memanggil `prediction-service :5001/api/predict`, lalu menyimpan hasil Skenario A, Skenario B, 5 faktor SHAP, dan rekomendasi ke `assessment_db.assessments`).
+
 ---
 
-## 3. Fase yang Belum Dikerjakan (Fase 4 – Fase 8)
+## 3. Fase yang Belum Dikerjakan (Sisa Fase 4C – Fase 8)
 
-### Fase 4 — `prediction-service` di `obsense_ml/` (Port `5001`, Python)
-1. Bangun REST API Python (Flask atau FastAPI) di folder `obsense_ml/` pada port `5001` (tanpa database).
-2. Endpoint yang disediakan:
-   - `GET /health`
-   - `POST /api/predict`: menerima data antropometri (`gender`, `age`, `height`, `weight`, `family_history_with_overweight`) + agregasi fitur 14 hari (`faf_mean`, `tue_mean`, `fcvc_mode`, `favc_ratio`, `ch2o_mean`, `caec`, `scc`, `calc`, `mtrans`) → mengembalikan `bmi`, `obesity_class` (7 kelas UCI), `probability_scores`, `risk_level`, `recommendations`, dan `model_version`.
-   - `GET /api/predict/metadata`: mengembalikan `feature_importance` dan `correlation_matrix` untuk grafik analitik di web.
-3. Integrasikan `assessment-service` → `prediction-service`: saat siklus 14 hari selesai atau endpoint trigger prediksi dipanggil, `assessment-service` memanggil `prediction-service` lewat HTTP dan menyimpan hasilnya ke tabel `assessments`.
-4. Tambahkan routing `/api/predict` di `services/gateway/src/server.js` dan masukkan `prediction-service` ke `scripts/start-all.ps1`.
+### Sisa Fase 4 — Integrasi ML ke Dashboard Web (Issue #3)
+- **Issue #3 (`obsense_web` — Visualisasi A/B & SHAP):**
+  - Buat `obsense_web/src/services/predictionService.js`.
+  - Perbarui `ReportsAnalytics.js`, `FeatureBarChart.js`, dan `CorrelationHeatmap.js` agar memuat `GET /api/predict/metadata` + menambahkan **Toggle Skenario A vs Skenario B** dan tabel perbandingan A/B Testing (`96.41%` vs `85.65%`).
+  - Tambahkan tombol **"Jalankan Prediksi ML"** dan tampilan dual-scenario (Skenario A + Skenario B + SHAP) di `UserDetailModal.js` & `DataManagement.js`.
 
 ### Fase 5 — `admin-service` (`:4005`, DB `admin_db`) & `audit-service` (`:4006`, DB `audit_db`)
 > **Referensi kode lama:** Di GitHub pada commit `2a234e6` (branch `origin/mhilya`), sudah tersedia kode controller lama (`evaluationController.js`, `configController.js`, `auditController.js`) serta struktur tabel & seed konfigurasi WHO di `obsense_web/server/src/config/schema.sql` yang bisa langsung diadaptasi.
@@ -133,18 +153,18 @@ Karena file `.env` dan folder `node_modules/` tidak masuk ke Git (`.gitignore`),
    git pull origin feat/microservices
    ```
 2. **Pastikan prasyarat terpasang:**
-   - Node.js (≥ 18 / 22), MySQL Server / XAMPP dalam kondisi menyala, dan Python (untuk Fase 4 nanti).
+   - Node.js (≥ 18 / 22), MySQL Server / XAMPP dalam kondisi menyala, dan Python 3 (instal dependency ML dengan `pip install -r obsense_ml/requirements.txt`).
 3. **Buat & sesuaikan file `.env` tiap service** (salin dari `.env.example`):
    - `services/auth-service/.env` (`PORT=4001`, `DB_NAME=auth_db`, isi `DB_PASSWORD`, samakan `JWT_SECRET`)
    - `services/user-service/.env` (`PORT=4002`, `DB_NAME=user_db`, isi `DB_PASSWORD`, **samakan `JWT_SECRET`**)
-   - `services/assessment-service/.env` (`PORT=4003`, `DB_NAME=assessment_db`, isi `DB_PASSWORD`, **samakan `JWT_SECRET`**)
-   - `services/gateway/.env` (`PORT=4000`, `AUTH_SERVICE_URL`, `USER_SERVICE_URL`, `ASSESSMENT_SERVICE_URL`)
+   - `services/assessment-service/.env` (`PORT=4003`, `DB_NAME=assessment_db`, isi `DB_PASSWORD`, **samakan `JWT_SECRET`**, `USER_SERVICE_URL=http://localhost:4002`, `PREDICTION_SERVICE_URL=http://localhost:5001`)
+   - `services/gateway/.env` (`PORT=4000`, `AUTH_SERVICE_URL`, `USER_SERVICE_URL`, `ASSESSMENT_SERVICE_URL`, `PREDICTION_SERVICE_URL`)
    *(Atau jalankan `.\scripts\start-all.ps1` sekali agar `.env` dibuat otomatis dari `.env.example`, lalu edit `DB_PASSWORD` dan `JWT_SECRET`, lalu restart service).*
-4. **Jalankan semua service backend:**
+4. **Jalankan semua service backend (4 Node.js + 1 Python ML):**
    ```powershell
    .\scripts\start-all.ps1
    ```
-   Pastikan `http://localhost:4000/health` menampilkan `gateway` beserta route `/api/auth`, `/api/users`, `/api/cycles`, `/api/assessments`.
+   Pastikan `http://localhost:4000/health` menampilkan `gateway` beserta route `/api/auth`, `/api/users`, `/api/cycles`, `/api/assessments`, `/api/predict`.
 5. **Jalankan frontend web:**
    ```powershell
    cd obsense_web
@@ -160,22 +180,23 @@ Karena file `.env` dan folder `node_modules/` tidak masuk ke Git (`.gitignore`),
 Salin teks berikut ke chat AI baru setelah membuka proyek di device baru:
 
 ```text
-Kita sedang mengerjakan migrasi proyek OBSENSE ke arsitektur Microservices (Database-per-Service, tanpa Docker) di branch `feat/microservices`.
+Kita sedang mengerjakan migrasi proyek OBSENSE ke arsitektur Polyglot Microservices (Database-per-Service, Node.js + Python, tanpa Docker) di branch `feat/microservices`.
 Baca dokumen `docs/ROADMAP_DAN_PROGRESS_MICROSERVICES.md` terlebih dahulu untuk konteks lengkap.
 
-Ringkasan status saat ini (Fase 0 sampai Fase 3 SUDAH SELESAI):
-1. `services/gateway` (:4000) -> proxy ke auth, user, dan assessment service.
+Ringkasan status saat ini (Fase 0 sampai Fase 4B / Issue #1 & #2 SUDAH SELESAI):
+1. `services/gateway` (:4000) -> proxy ke auth, user, assessment, dan prediction service.
 2. `services/auth-service` (:4001, DB `auth_db`: `users`, `admins`, `login_attempts`) -> `/api/auth/*`.
-3. `services/user-service` (:4002, DB `user_db`: `users`) -> `/api/users/*`.
-4. `services/assessment-service` (:4003, DB `assessment_db`: `assessment_cycles`, `daily_logs`, `assessments`) -> `/api/cycles/*` & `/api/assessments/*`.
-5. `obsense_web` sudah terhubung ke `:4000/api` untuk Login, AdminManagement, Dashboard, UserList, UserDetailModal, UserEditModal, DataManagement, dan ReportsAnalytics.
-6. Sebagai referensi kode lama, di commit `2a234e6` (`origin/mhilya`) terdapat `evaluationController.js`, `configController.js`, dan `auditController.js` di `obsense_web/server/src/controllers/`.
+3. `services/user-service` (:4002, DB `user_db`: `users` termasuk kolom `smoke`) -> `/api/users/*`.
+4. `services/assessment-service` (:4003, DB `assessment_db`: `assessment_cycles`, `daily_logs` termasuk `ncp`, `assessments` termasuk `lifestyle_prediction` & `shap_factors`) -> `/api/cycles/*`, `/api/assessments/*`, dan `POST /api/assessments/predict` (memanggil `user-service` + `prediction-service`).
+5. `obsense_ml` (`prediction-service`, :5001, Python Flask + scikit-learn + SHAP) -> `/api/predict` & `/api/predict/metadata` dengan dua model Random Forest Tuned (Skenario A Full 96.41% & Skenario B Lifestyle-Only 85.65%).
+6. `obsense_web` sudah terhubung ke `:4000/api` untuk Login, AdminManagement, Dashboard, UserList, UserDetailModal, UserEditModal, DataManagement, dan ReportsAnalytics (grafik Feature Importance & Correlation masih memakai konstanta mockData.js sampai Issue #3 dikerjakan).
+7. Sebagai referensi kode lama, di commit `2a234e6` (`origin/mhilya`) terdapat `evaluationController.js`, `configController.js`, dan `auditController.js` di `obsense_web/server/src/controllers/`.
 
 Fase yang BELUM dikerjakan:
-- Fase 4: `prediction-service` di `obsense_ml/` (:5001, Python REST API) + integrasi ke `assessment-service`.
-- Fase 5: `services/admin-service` (:4005, DB `admin_db`) & `services/audit-service` (:4006, DB `audit_db`).
-- Fase 6: Sambungkan sisa halaman web (`AdminEvaluations.js`, `SystemConfig.js`, `AuditLogs.js`, audit feed `Dashboard.js`, grafik ML) dan hapus `obsense_web/server/`.
+- Issue #3 (Fase 4C): Integrasi metrik A/B testing, toggle SHAP Skenario A vs B, dan tombol trigger prediksi ML di `obsense_web`.
+- Issue #4–#6 (Mobile): Integrasi auth, profil, log 14 hari, dan tampilan prediksi dual-scenario di `obsense_mobile`.
+- Issue #7 (Fase 5 & 6): `services/admin-service` (:4005, DB `admin_db`), `services/audit-service` (:4006, DB `audit_db`), sambungkan 3 halaman web terakhir (`AdminEvaluations.js`, `SystemConfig.js`, `AuditLogs.js`), dan hapus `obsense_web/server/`.
 - Fase 7: Dokumentasi akhir & Postman collection; Fase 8: Docker (opsional).
 
-Tolong verifikasi kondisi repo saat ini, lalu tanyakan apakah saya ingin lanjut ke Fase 4 atau Fase 5.
+Tolong verifikasi kondisi repo saat ini, lalu tanyakan apakah saya ingin lanjut ke Issue #3 atau Issue #7.
 ```

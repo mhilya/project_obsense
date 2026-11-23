@@ -44,6 +44,7 @@ async function initDatabase() {
         \`weight\` DECIMAL(5,2) NULL COMMENT 'kg',
         \`address\` TEXT NULL,
         \`family_history_with_overweight\` BOOLEAN NOT NULL DEFAULT FALSE,
+        \`smoke\` BOOLEAN NOT NULL DEFAULT FALSE,
         \`status\` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
         \`deleted_at\` DATETIME NULL,
         \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -53,6 +54,17 @@ async function initDatabase() {
         INDEX \`idx_users_deleted\` (\`deleted_at\`)
       ) ENGINE=InnoDB AUTO_INCREMENT=100000;
     `);
+
+    // Migrasi aman untuk database lama yang belum memiliki kolom smoke
+    const [cols] = await pool.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'smoke'`,
+      [dbName]
+    );
+    if (cols.length === 0) {
+      await pool.query(
+        'ALTER TABLE `users` ADD COLUMN `smoke` BOOLEAN NOT NULL DEFAULT FALSE AFTER `family_history_with_overweight`'
+      );
+    }
 
     console.log(`✅ user-service: database "${dbName}" siap.`);
   } catch (error) {

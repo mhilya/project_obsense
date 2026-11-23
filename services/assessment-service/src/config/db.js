@@ -57,6 +57,7 @@ async function initDatabase() {
         \`faf\` INT NOT NULL DEFAULT 0,
         \`tue\` INT NOT NULL DEFAULT 0,
         \`fcvc\` INT NOT NULL DEFAULT 1,
+        \`ncp\` INT NOT NULL DEFAULT 3,
         \`favc\` BOOLEAN NOT NULL DEFAULT FALSE,
         \`ch2o\` DECIMAL(3,1) NOT NULL DEFAULT 1.5,
         \`caec\` ENUM('no', 'Sometimes', 'Frequently', 'Always') NOT NULL DEFAULT 'Sometimes',
@@ -78,11 +79,13 @@ async function initDatabase() {
         \`id\` INT AUTO_INCREMENT PRIMARY KEY,
         \`cycle_id\` INT NOT NULL,
         \`user_id\` INT NOT NULL,
-        \`bmi\` DECIMAL(5,2) NOT NULL,
+        \`bmi\` DECIMAL(5,2) NULL,
         \`obesity_class\` ENUM('Insufficient_Weight','Normal_Weight','Overweight_Level_I','Overweight_Level_II','Obesity_Type_I','Obesity_Type_II','Obesity_Type_III') NOT NULL,
         \`probability_scores\` JSON NOT NULL,
         \`risk_level\` ENUM('Low', 'Moderate', 'High', 'Critical') NOT NULL DEFAULT 'Low',
         \`recommendations\` JSON NULL,
+        \`lifestyle_prediction\` JSON NULL,
+        \`shap_factors\` JSON NULL,
         \`model_version\` VARCHAR(50) NOT NULL DEFAULT 'manual',
         \`assessment_date\` DATE NOT NULL,
         \`deleted_at\` DATETIME NULL,
@@ -95,6 +98,21 @@ async function initDatabase() {
         INDEX \`idx_assessments_date\` (\`assessment_date\`)
       ) ENGINE=InnoDB;
     `);
+
+    // Migrasi aman untuk database lama agar kolom baru (ncp, lifestyle_prediction, shap_factors, bmi nullable) tersedia
+    const ensureColumn = async (table, col, definition) => {
+      const [cols] = await pool.query(
+        'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+        [dbName, table, col]
+      );
+      if (cols.length === 0) {
+        await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${definition}`);
+      }
+    };
+    await ensureColumn('daily_logs', 'ncp', 'INT NOT NULL DEFAULT 3 AFTER `fcvc`');
+    await ensureColumn('assessments', 'lifestyle_prediction', 'JSON NULL AFTER `recommendations`');
+    await ensureColumn('assessments', 'shap_factors', 'JSON NULL AFTER `lifestyle_prediction`');
+    await pool.query('ALTER TABLE `assessments` MODIFY COLUMN `bmi` DECIMAL(5,2) NULL');
 
     console.log(`✅ assessment-service: database "${dbName}" siap.`);
   } catch (error) {

@@ -3,14 +3,19 @@
 $root = Split-Path -Parent $PSScriptRoot
 
 $services = @(
-  @{ name = 'auth-service'; dir = "$root\services\auth-service" },
-  @{ name = 'user-service'; dir = "$root\services\user-service" },
-  @{ name = 'assessment-service'; dir = "$root\services\assessment-service" },
-  @{ name = 'gateway';      dir = "$root\services\gateway" }
+  @{ name = 'auth-service';       dir = "$root\services\auth-service";       type = 'node' },
+  @{ name = 'user-service';       dir = "$root\services\user-service";       type = 'node' },
+  @{ name = 'assessment-service'; dir = "$root\services\assessment-service"; type = 'node' },
+  @{ name = 'prediction-service'; dir = "$root\obsense_ml";                  type = 'python' },
+  @{ name = 'gateway';            dir = "$root\services\gateway";            type = 'node' }
   # Tambahkan service lain di sini setelah dibuat
 )
 
 foreach ($s in $services) {
+  if ($s.type -eq 'python') {
+    Start-Process powershell -ArgumentList '-NoExit', '-Command', "`$host.UI.RawUI.WindowTitle='$($s.name)'; cd '$($s.dir)'; python app.py"
+    continue
+  }
   if (-not (Test-Path "$($s.dir)\node_modules")) {
     Write-Host "npm install: $($s.name)"
     Push-Location $s.dir; npm install; Pop-Location

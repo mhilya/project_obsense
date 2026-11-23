@@ -17,6 +17,7 @@ const routes = [
   { path: '/api/users', target: process.env.USER_SERVICE_URL || 'http://localhost:4002' },
   { path: '/api/cycles', target: process.env.ASSESSMENT_SERVICE_URL || 'http://localhost:4003' },
   { path: '/api/assessments', target: process.env.ASSESSMENT_SERVICE_URL || 'http://localhost:4003' },
+  { path: '/api/predict', target: process.env.PREDICTION_SERVICE_URL || 'http://localhost:5001' },
 ];
 
 // Catatan: jangan pakai express.json() di gateway agar body diteruskan apa adanya.

@@ -16,6 +16,7 @@ cycleRouter.delete('/daily-logs/:id', authMiddleware, cycleController.deleteDail
 // /api/assessments
 const assessmentRouter = express.Router();
 assessmentRouter.get('/', authMiddleware, assessmentController.getAssessments);
+assessmentRouter.post('/predict', authMiddleware, assessmentController.predictAssessment);
 assessmentRouter.get('/:id', authMiddleware, assessmentController.getAssessmentById);
 assessmentRouter.post('/', authMiddleware, assessmentController.createAssessment);
 
