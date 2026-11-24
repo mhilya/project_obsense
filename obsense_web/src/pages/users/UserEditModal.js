@@ -1,24 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { X, Scale, Save } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
-import useAuth from '../../hooks/useAuth';
-import storageService from '../../mock/storageService';
+import userService, { apiErrorMessage } from '../../services/userService';
+
+const DEFAULT_FORM = {
+  name: '',
+  email: '',
+  phone: '',
+  gender: 'Male',
+  age: 25,
+  height: 170,
+  weight: 70,
+  family_history_with_overweight: false,
+  status: 'active'
+};
 
 export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
-  const { user: currentAdmin } = useAuth();
   const { showSuccess, showError } = useNotification();
+  const isEditMode = Boolean(user);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    gender: 'Male',
-    age: 25,
-    height: 170,
-    weight: 70,
-    family_history_with_overweight: false,
-    status: 'active'
-  });
+  const [formData, setFormData] = useState(DEFAULT_FORM);
 
   useEffect(() => {
     if (user) {
@@ -27,16 +28,18 @@ export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
         email: user.email || '',
         phone: user.phone || '',
         gender: user.gender || 'Male',
-        age: user.age || 25,
-        height: user.height || 170,
-        weight: user.weight || 70,
+        age: user.age ?? 25,
+        height: user.height ?? 170,
+        weight: user.weight ?? 70,
         family_history_with_overweight: !!user.family_history_with_overweight,
         status: user.status || 'active'
       });
+    } else {
+      setFormData(DEFAULT_FORM);
     }
-  }, [user]);
+  }, [user, isOpen]);
 
-  if (!isOpen || !user) return null;
+  if (!isOpen) return null;
 
   // Real-time calculated BMI
   const calculatedBmi =
@@ -44,7 +47,7 @@ export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
       ? (formData.weight / ((formData.height / 100) ** 2)).toFixed(1)
       : '0.0';
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.email || formData.height <= 0 || formData.weight <= 0) {
       showError('Harap lengkapi semua data wajib dengan benar!');
@@ -52,16 +55,21 @@ export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
     }
 
     try {
-      const updated = storageService.updateUser(
-        user.id,
-        formData,
-        currentAdmin?.name || 'Administrator'
+      const saved = isEditMode
+        ? await userService.updateUser(user.id, formData)
+        : await userService.createUser(formData);
+      showSuccess(
+        isEditMode
+          ? `Data antropometri ${saved.name} berhasil diperbarui!`
+          : `Pasien baru ${saved.name} berhasil ditambahkan!`
       );
-      showSuccess(`Data antropometri ${updated.name} berhasil diperbarui!`);
-      onSaveSuccess(updated);
+      onSaveSuccess(saved);
       onClose();
     } catch (err) {
-      showError('Gagal memperbarui data pengguna: ' + err.message);
+      showError(
+        (isEditMode ? 'Gagal memperbarui data pengguna: ' : 'Gagal menambahkan pasien: ') +
+          apiErrorMessage(err)
+      );
     }
   };
 
@@ -77,8 +85,14 @@ export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
       >
         <div className="flex items-center justify-between border-b border-slate-100 p-5 dark:border-slate-800">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Koreksi Antropometri Pasien</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">ID Pasien: #{user.id} • {user.name}</p>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              {isEditMode ? 'Koreksi Antropometri Pasien' : 'Tambah Pasien Baru'}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              {isEditMode
+                ? `ID Pasien: #${user.id} • ${user.name}`
+                : 'Isi profil dan data antropometri awal pasien'}
+            </p>
           </div>
           <button
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
@@ -207,7 +221,7 @@ export const UserEditModal = ({ isOpen, user, onClose, onSaveSuccess }) => {
               className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-500"
             >
               <Save size={15} />
-              <span>Simpan Koreksi</span>
+              <span>{isEditMode ? 'Simpan Koreksi' : 'Tambah Pasien'}</span>
             </button>
           </div>
         </form>

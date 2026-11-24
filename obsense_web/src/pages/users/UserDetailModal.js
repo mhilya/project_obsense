@@ -1,15 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, User, Calendar, Activity } from 'lucide-react';
-import storageService from '../../mock/storageService';
+import assessmentService from '../../services/assessmentService';
+import cycleService from '../../services/cycleService';
 import { OBESITY_CLASSES } from '../../mock/mockData';
 
 export const UserDetailModal = ({ isOpen, user, onClose, onEdit }) => {
   const [activeTab, setActiveTab] = useState('profile');
+  const [assessments, setAssessments] = useState([]);
+  const [dailyLogs, setDailyLogs] = useState([]);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen || !user) return undefined;
+    let cancelled = false;
+    setLoadError('');
+    Promise.all([
+      assessmentService.getAssessments({ user_id: user.id }),
+      cycleService.getDailyLogs({ user_id: user.id })
+    ])
+      .then(([a, l]) => {
+        if (cancelled) return;
+        setAssessments(a);
+        // tampilkan berurutan dari hari pertama
+        setDailyLogs([...l].sort((x, y) => (x.log_date < y.log_date ? -1 : 1)));
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err.response?.data?.message || err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, user]);
 
   if (!isOpen || !user) return null;
-
-  const assessments = storageService.getAssessments(user.id);
-  const dailyLogs = storageService.getDailyLogs({ userId: user.id });
 
   const classConfig = OBESITY_CLASSES.find((c) => c.key === user.obesity_class) || {
     label: user.obesity_class || 'Tidak diketahui',
@@ -99,11 +122,11 @@ export const UserDetailModal = ({ isOpen, user, onClose, onEdit }) => {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-center dark:border-slate-800 dark:bg-slate-800/40">
                   <span className="block text-[10px] font-bold uppercase text-slate-400">Tinggi Badan</span>
-                  <span className="mt-1 block text-base font-extrabold text-slate-900 dark:text-white">{user.height} cm</span>
+                  <span className="mt-1 block text-base font-extrabold text-slate-900 dark:text-white">{user.height ?? '-'} cm</span>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-center dark:border-slate-800 dark:bg-slate-800/40">
                   <span className="block text-[10px] font-bold uppercase text-slate-400">Berat Badan</span>
-                  <span className="mt-1 block text-base font-extrabold text-slate-900 dark:text-white">{user.weight} kg</span>
+                  <span className="mt-1 block text-base font-extrabold text-slate-900 dark:text-white">{user.weight ?? '-'} kg</span>
                 </div>
                 <div className="rounded-xl border border-blue-500/30 bg-blue-50/60 p-3 text-center dark:border-blue-500/30 dark:bg-blue-950/40">
                   <span className="block text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400">BMI</span>
@@ -112,7 +135,7 @@ export const UserDetailModal = ({ isOpen, user, onClose, onEdit }) => {
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-center dark:border-slate-800 dark:bg-slate-800/40">
                   <span className="block text-[10px] font-bold uppercase text-slate-400">Usia & Gender</span>
                   <span className="mt-1 block text-xs font-extrabold text-slate-900 dark:text-white">
-                    {user.age} Thn • {user.gender === 'Male' ? 'L' : 'P'}
+                    {user.age ?? '-'} Thn • {user.gender === 'Male' ? 'L' : user.gender === 'Female' ? 'P' : '-'}
                   </span>
                 </div>
               </div>
@@ -192,6 +215,12 @@ export const UserDetailModal = ({ isOpen, user, onClose, onEdit }) => {
                   Koreksi Data Antropometri
                 </button>
               </div>
+            </div>
+          )}
+
+          {loadError && (
+            <div className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+              Gagal memuat riwayat: {loadError}
             </div>
           )}
 

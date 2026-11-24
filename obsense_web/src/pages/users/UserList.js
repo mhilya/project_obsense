@@ -3,20 +3,20 @@ import DataTable from '../../components/common/DataTable';
 import UserDetailModal from './UserDetailModal';
 import UserEditModal from './UserEditModal';
 import storageService from '../../mock/storageService';
+import userService, { apiErrorMessage } from '../../services/userService';
 import { OBESITY_CLASSES } from '../../mock/mockData';
 import { useNotification } from '../../context/NotificationContext';
-import useAuth from '../../hooks/useAuth';
 import {
   Eye,
   Edit2,
   Trash2,
   Power,
-  FileSpreadsheet
+  FileSpreadsheet,
+  UserPlus
 } from 'lucide-react';
 
 export const UserList = () => {
-  const { user: currentAdmin } = useAuth();
-  const { showSuccess, confirm } = useNotification();
+  const { showSuccess, showError, confirm } = useNotification();
 
   const [users, setUsers] = useState([]);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -24,9 +24,14 @@ export const UserList = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
 
-  const loadUsers = useCallback(() => {
-    const list = storageService.getUsers(showDeleted);
-    setUsers([...list]);
+  const loadUsers = useCallback(async () => {
+    try {
+      const list = await userService.getUsersWithLatest({ includeDeleted: showDeleted });
+      setUsers(list);
+    } catch (err) {
+      showError('Gagal memuat data pengguna: ' + apiErrorMessage(err));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showDeleted]);
 
   useEffect(() => {
@@ -37,6 +42,11 @@ export const UserList = () => {
   const handleViewDetail = (user) => {
     setSelectedUser(user);
     setDetailModalOpen(true);
+  };
+
+  const handleOpenCreate = () => {
+    setSelectedUser(null);
+    setEditModalOpen(true);
   };
 
   const handleOpenEdit = (user) => {
@@ -53,9 +63,15 @@ export const UserList = () => {
     });
 
     if (ok) {
-      storageService.toggleUserStatus(user.id, currentAdmin?.name);
-      showSuccess(`Status ${user.name} berhasil diubah menjadi ${nextStatus}`);
-      loadUsers();
+      try {
+        await userService.updateUser(user.id, {
+          status: user.status === 'active' ? 'inactive' : 'active'
+        });
+        showSuccess(`Status ${user.name} berhasil diubah menjadi ${nextStatus}`);
+        loadUsers();
+      } catch (err) {
+        showError('Gagal mengubah status: ' + apiErrorMessage(err));
+      }
     }
   };
 
@@ -68,9 +84,23 @@ export const UserList = () => {
     });
 
     if (ok) {
-      storageService.deleteUser(user.id, currentAdmin?.name);
-      showSuccess(`Akun ${user.name} berhasil dihapus secara soft-delete.`);
+      try {
+        await userService.deleteUser(user.id);
+        showSuccess(`Akun ${user.name} berhasil dihapus secara soft-delete.`);
+        loadUsers();
+      } catch (err) {
+        showError('Gagal menghapus pengguna: ' + apiErrorMessage(err));
+      }
+    }
+  };
+
+  const handleRestoreUser = async (user) => {
+    try {
+      await userService.restoreUser(user.id);
+      showSuccess(`Akun ${user.name} berhasil dipulihkan.`);
       loadUsers();
+    } catch (err) {
+      showError('Gagal memulihkan pengguna: ' + apiErrorMessage(err));
     }
   };
 
@@ -96,7 +126,7 @@ export const UserList = () => {
       key: 'age',
       render: (val, row) => (
         <span className="font-medium text-slate-700 dark:text-slate-300">
-          {row.gender === 'Male' ? 'Laki-laki' : 'Perempuan'}, {row.age} th
+          {row.gender === 'Male' ? 'Laki-laki' : row.gender === 'Female' ? 'Perempuan' : '-'}, {row.age ?? '-'} th
         </span>
       )
     },
@@ -105,14 +135,14 @@ export const UserList = () => {
       key: 'height',
       render: (val, row) => (
         <span className="font-medium text-slate-700 dark:text-slate-300">
-          {row.height} cm / {row.weight} kg
+          {row.height ?? '-'} cm / {row.weight ?? '-'} kg
         </span>
       )
     },
     {
       header: 'Nilai BMI',
       key: 'bmi',
-      render: (val) => <strong className="font-mono text-xs font-bold text-slate-900 dark:text-white">{val}</strong>
+      render: (val) => <strong className="font-mono text-xs font-bold text-slate-900 dark:text-white">{val ?? '-'}</strong>
     },
     {
       header: 'Kategori Obesitas (UCI)',
@@ -127,7 +157,7 @@ export const UserList = () => {
               color: cls?.color || '#64748b'
             }}
           >
-            {cls?.label || val}
+            {cls?.label || val || 'Belum ada data'}
           </span>
         );
       }
@@ -185,6 +215,13 @@ export const UserList = () => {
             <span>Tampilkan terhapus (Soft delete)</span>
           </label>
           <button
+            className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-500"
+            onClick={handleOpenCreate}
+          >
+            <UserPlus size={15} />
+            <span>Tambah Pasien</span>
+          </button>
+          <button
             className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             onClick={handleExportUsers}
           >
@@ -219,6 +256,15 @@ export const UserList = () => {
             >
               <Edit2 size={14} />
             </button>
+            {row.deleted_at && (
+              <button
+                className="flex h-7 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400"
+                title="Pulihkan Akun"
+                onClick={() => handleRestoreUser(row)}
+              >
+                Pulihkan
+              </button>
+            )}
             {!row.deleted_at && (
               <>
                 <button
@@ -265,7 +311,7 @@ export const UserList = () => {
           onClose={() => setEditModalOpen(false)}
           onSaveSuccess={(updated) => {
             loadUsers();
-            setSelectedUser(updated);
+            setSelectedUser((prev) => (prev ? { ...prev, ...updated } : updated));
           }}
         />
       )}

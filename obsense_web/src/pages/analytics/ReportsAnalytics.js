@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DonutChart from '../../components/charts/DonutChart';
 import TrendLineChart from '../../components/charts/TrendLineChart';
 import CorrelationHeatmap from '../../components/charts/CorrelationHeatmap';
 import FeatureBarChart from '../../components/charts/FeatureBarChart';
 import storageService from '../../mock/storageService';
+import dashboardService, { EMPTY_STATS } from '../../services/dashboardService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   FileSpreadsheet,
@@ -18,7 +19,14 @@ import {
 
 export const ReportsAnalytics = () => {
   const { showSuccess } = useNotification();
-  const [stats] = useState(() => storageService.getDashboardStats());
+  const [stats, setStats] = useState(EMPTY_STATS);
+
+  useEffect(() => {
+    dashboardService
+      .getStats()
+      .then(setStats)
+      .catch((err) => console.error('Gagal memuat statistik:', err));
+  }, []);
 
   const handleExportCSVReport = () => {
     const summaryData = [
@@ -49,7 +57,16 @@ export const ReportsAnalytics = () => {
     {
       label: 'Rata-Rata Indeks Massa Tubuh',
       value: `${stats.avgBmi} kg/m²`,
-      sub: 'Status: Overweight',
+      sub:
+        stats.avgBmi <= 0
+          ? 'Belum ada data'
+          : stats.avgBmi < 18.5
+            ? 'Status: Underweight'
+            : stats.avgBmi < 25
+              ? 'Status: Normal'
+              : stats.avgBmi < 30
+                ? 'Status: Overweight'
+                : 'Status: Obesitas',
       icon: Scale,
       color: '#f59e0b',
       bgColor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'

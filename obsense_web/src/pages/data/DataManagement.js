@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import DataTable from '../../components/common/DataTable';
 import storageService from '../../mock/storageService';
+import cycleService from '../../services/cycleService';
+import userService, { apiErrorMessage } from '../../services/userService';
 import { useNotification } from '../../context/NotificationContext';
-import useAuth from '../../hooks/useAuth';
 import {
   Database,
   FileSpreadsheet,
@@ -14,7 +15,6 @@ import {
 } from 'lucide-react';
 
 export const DataManagement = () => {
-  const { user: currentAdmin } = useAuth();
   const { showSuccess, showError, confirm } = useNotification();
 
   const [logs, setLogs] = useState([]);
@@ -23,9 +23,23 @@ export const DataManagement = () => {
   const [selectedCycleId, setSelectedCycleId] = useState('');
   const [editingLog, setEditingLog] = useState(null);
 
-  const loadData = () => {
-    setLogs(storageService.getDailyLogs());
-    setCycles(storageService.getCycles());
+  const loadData = async () => {
+    try {
+      const [logList, cycleList, userList] = await Promise.all([
+        cycleService.getDailyLogs(),
+        cycleService.getCycles(),
+        userService.getUsers({ includeDeleted: 'true' })
+      ]);
+      const names = {};
+      userList.forEach((u) => {
+        names[u.id] = u.name;
+      });
+      const withName = (row) => ({ ...row, userName: names[row.user_id] || `Pasien #${row.user_id}` });
+      setLogs(logList.map(withName));
+      setCycles(cycleList.map(withName));
+    } catch (err) {
+      showError('Gagal memuat data: ' + apiErrorMessage(err));
+    }
   };
 
   useEffect(() => {
@@ -46,23 +60,28 @@ export const DataManagement = () => {
     });
 
     if (ok) {
-      storageService.deleteDailyLog(log.id, currentAdmin?.name);
-      showSuccess('Log harian berhasil dihapus.');
-      loadData();
+      try {
+        await cycleService.deleteDailyLog(log.id);
+        showSuccess('Log harian berhasil dihapus.');
+        loadData();
+      } catch (err) {
+        showError('Gagal menghapus log: ' + apiErrorMessage(err));
+      }
     }
   };
 
-  const handleSaveEditLog = (e) => {
+  const handleSaveEditLog = async (e) => {
     e.preventDefault();
     if (!editingLog) return;
 
     try {
-      storageService.updateDailyLog(editingLog.id, editingLog, currentAdmin?.name);
+      const { faf, tue, fcvc, favc, ch2o, notes } = editingLog;
+      await cycleService.updateDailyLog(editingLog.id, { faf, tue, fcvc, favc, ch2o, notes });
       showSuccess(`Log H-${editingLog.day_number} untuk ${editingLog.userName} berhasil diperbarui!`);
       setEditingLog(null);
       loadData();
     } catch (err) {
-      showError('Gagal memperbarui log: ' + err.message);
+      showError('Gagal memperbarui log: ' + apiErrorMessage(err));
     }
   };
 

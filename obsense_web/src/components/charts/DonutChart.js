@@ -4,12 +4,12 @@ import { OBESITY_CLASSES } from '../../mock/mockData';
 export const DonutChart = ({ classCounts = {} }) => {
   const [hoveredSlice, setHoveredSlice] = useState(null);
 
-  const total = Object.values(classCounts).reduce((acc, c) => acc + c, 0) || 1;
+  const total = Object.values(classCounts).reduce((acc, c) => acc + c, 0);
 
   let cumulativePercent = 0;
   const segments = OBESITY_CLASSES.map((cls) => {
     const count = classCounts[cls.key] || 0;
-    const percent = (count / total) * 100;
+    const percent = total > 0 ? (count / total) * 100 : 0;
     const startAngle = (cumulativePercent / 100) * 360;
     cumulativePercent += percent;
     const endAngle = (cumulativePercent / 100) * 360;

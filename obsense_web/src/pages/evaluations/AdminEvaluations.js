@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import storageService from '../../mock/storageService';
+import userService from '../../services/userService';
 import useAuth from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
 import {
@@ -28,11 +29,16 @@ export const AdminEvaluations = () => {
   const [adjustedRisk, setAdjustedRisk] = useState('High');
 
   useEffect(() => {
-    const userList = storageService.getUsers();
-    setUsers(userList);
-    if (userList.length > 0) {
-      setSelectedUserId(String(userList[0].id));
-    }
+    userService
+      .getUsersWithLatest()
+      .then((userList) => {
+        setUsers(userList);
+        if (userList.length > 0) {
+          setSelectedUserId(String(userList[0].id));
+        }
+      })
+      .catch((err) => showError('Gagal memuat daftar pasien: ' + (err.response?.data?.message || err.message)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -46,7 +52,7 @@ export const AdminEvaluations = () => {
   const filteredUsers = users.filter((u) =>
     u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.obesity_class.toLowerCase().includes(searchTerm.toLowerCase())
+    (u.obesity_class || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleAddEvaluation = (e) => {
@@ -150,7 +156,7 @@ export const AdminEvaluations = () => {
               >
                 {filteredUsers.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — BMI {u.bmi} ({u.obesity_class.replace(/_/g, ' ')})
+                    {u.name} — BMI {u.bmi} ({(u.obesity_class || 'Belum ada data').replace(/_/g, ' ')})
                   </option>
                 ))}
               </select>
@@ -183,7 +189,7 @@ export const AdminEvaluations = () => {
                         BMI: <strong>{selectedUser.bmi}</strong>
                       </div>
                       <div className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 truncate">
-                        <strong className="text-slate-900 dark:text-white">{selectedUser.obesity_class.replace(/_/g, ' ')}</strong>
+                        <strong className="text-slate-900 dark:text-white">{(selectedUser.obesity_class || 'Belum ada data').replace(/_/g, ' ')}</strong>
                       </div>
                     </div>
                   </div>
