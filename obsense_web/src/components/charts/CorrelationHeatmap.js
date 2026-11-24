@@ -1,9 +1,28 @@
 import React from 'react';
 import { CORRELATION_MATRIX_DATA } from '../../mock/mockData';
-import { Activity, Tv, Salad, Flame, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  Activity,
+  Tv,
+  Salad,
+  Flame,
+  TrendingDown,
+  TrendingUp,
+  Scale,
+  Users,
+  Calendar,
+  Droplets
+} from 'lucide-react';
 
-export const CorrelationHeatmap = () => {
+export const CorrelationHeatmap = ({ correlationData = null }) => {
+  const items = Array.isArray(correlationData) && correlationData.length > 0
+    ? correlationData
+    : CORRELATION_MATRIX_DATA;
+
   const getIcon = (feature) => {
+    if (feature.includes('Weight')) return <Scale size={18} />;
+    if (feature.includes('Keluarga')) return <Users size={18} />;
+    if (feature.includes('Age')) return <Calendar size={18} />;
+    if (feature.includes('CH2O')) return <Droplets size={18} />;
     if (feature.includes('FAF')) return <Activity size={18} />;
     if (feature.includes('TUE')) return <Tv size={18} />;
     if (feature.includes('FCVC')) return <Salad size={18} />;
@@ -27,14 +46,14 @@ export const CorrelationHeatmap = () => {
 
       {/* Grid of correlation items */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-        {CORRELATION_MATRIX_DATA.map((item, idx) => {
-          const val = item.correlationWithObesity;
+        {items.map((item, idx) => {
+          const val = Number(item.correlationWithObesity || 0);
           const isNegative = val < 0;
-          const absVal = Math.abs(val);
+          const absVal = Math.min(Math.abs(val), 1);
 
           return (
             <div
-              key={idx}
+              key={item.key || idx}
               className={`p-3.5 rounded-xl border transition-all hover:shadow-md ${
                 isNegative
                   ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40'
@@ -57,7 +76,7 @@ export const CorrelationHeatmap = () => {
                       {item.feature}
                     </h5>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${
                         isNegative
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                           : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'

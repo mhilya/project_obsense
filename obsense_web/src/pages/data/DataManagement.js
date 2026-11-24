@@ -3,6 +3,7 @@ import DataTable from '../../components/common/DataTable';
 import storageService from '../../mock/storageService';
 import cycleService from '../../services/cycleService';
 import userService, { apiErrorMessage } from '../../services/userService';
+import predictionService from '../../services/predictionService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Database,
@@ -11,7 +12,8 @@ import {
   Trash2,
   Layers,
   X,
-  Save
+  Save,
+  Cpu
 } from 'lucide-react';
 
 export const DataManagement = () => {
@@ -22,6 +24,21 @@ export const DataManagement = () => {
   const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'cycles'
   const [selectedCycleId, setSelectedCycleId] = useState('');
   const [editingLog, setEditingLog] = useState(null);
+  const [predictingCycleId, setPredictingCycleId] = useState(null);
+
+  const handlePredictCycle = async (cycle) => {
+    setPredictingCycleId(cycle.id);
+    try {
+      const res = await predictionService.predictFromCycle({ cycle_id: cycle.id });
+      const clsA = (res.data?.obesity_class || '-').replace(/_/g, ' ');
+      const clsB = (res.data?.lifestyle_prediction?.obesity_class || '-').replace(/_/g, ' ');
+      showSuccess(`Prediksi ${cycle.userName} tersimpan — Skenario A: ${clsA} | Skenario B: ${clsB}`);
+    } catch (err) {
+      showError('Gagal menjalankan prediksi ML: ' + apiErrorMessage(err));
+    } finally {
+      setPredictingCycleId(null);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -323,6 +340,20 @@ export const DataManagement = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  disabled={predictingCycleId === cycle.id}
+                  onClick={() => handlePredictCycle(cycle)}
+                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-500 disabled:opacity-50"
+                >
+                  <Cpu size={14} />
+                  <span>
+                    {predictingCycleId === cycle.id ? 'Menjalankan Prediksi ML...' : 'Jalankan Prediksi ML'}
+                  </span>
+                </button>
               </div>
             </div>
           ))}

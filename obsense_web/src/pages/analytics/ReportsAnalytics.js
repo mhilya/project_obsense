@@ -5,6 +5,7 @@ import CorrelationHeatmap from '../../components/charts/CorrelationHeatmap';
 import FeatureBarChart from '../../components/charts/FeatureBarChart';
 import storageService from '../../mock/storageService';
 import dashboardService, { EMPTY_STATS } from '../../services/dashboardService';
+import predictionService from '../../services/predictionService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   FileSpreadsheet,
@@ -20,13 +21,22 @@ import {
 export const ReportsAnalytics = () => {
   const { showSuccess } = useNotification();
   const [stats, setStats] = useState(EMPTY_STATS);
+  const [mlMeta, setMlMeta] = useState(null);
 
   useEffect(() => {
     dashboardService
       .getStats()
       .then(setStats)
       .catch((err) => console.error('Gagal memuat statistik:', err));
+
+    predictionService
+      .getMetadata()
+      .then(setMlMeta)
+      .catch((err) => console.warn('Metadata ML belum tersedia, memakai fallback:', err.message));
   }, []);
+
+  const accFull = mlMeta?.models?.scenario_a_full?.metrics?.test_accuracy ?? 96.41;
+  const accLife = mlMeta?.models?.scenario_b_lifestyle?.metrics?.test_accuracy ?? 85.65;
 
   const handleExportCSVReport = () => {
     const summaryData = [
@@ -34,8 +44,8 @@ export const ReportsAnalytics = () => {
       { Indikator: 'Rata-rata BMI Populasi', Nilai: stats.avgBmi },
       { Indikator: 'Kasus Risiko Tinggi & Kritis', Nilai: stats.highRiskCount },
       { Indikator: 'Persentase Siklus Tuntas', Nilai: `${stats.completionRate}%` },
-      { Indikator: 'Versi Model ML', Nilai: 'Random Forest 7-Class v1.2' },
-      { Indikator: 'Fitur Paling Berpengaruh', Nilai: 'Weight (32%), Age (18%), FAF (14%)' }
+      { Indikator: 'Random Forest Tuned - Skenario A (Full)', Nilai: `${accFull}%` },
+      { Indikator: 'Random Forest Tuned - Skenario B (Lifestyle-Only)', Nilai: `${accLife}%` }
     ];
     storageService.exportToCSV(summaryData, `obsense_analytics_report_${Date.now()}.csv`);
     showSuccess('Laporan analitik berhasil diexport ke CSV!');
@@ -73,16 +83,16 @@ export const ReportsAnalytics = () => {
     },
     {
       label: 'Model Klasifikasi ML',
-      value: 'Random Forest v1.2',
-      sub: 'Akurasi F1-Score: 94.2%',
+      value: `RF Tuned ${accFull}%`,
+      sub: `Lifestyle-Only: ${accLife}%`,
       icon: Cpu,
       color: '#10b981',
       bgColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
     },
     {
-      label: 'Faktor Pendorong Utama',
-      value: 'FAVC (r = +0.72)',
-      sub: 'Makanan Tinggi Kalori',
+      label: 'Faktor Utama (A vs B)',
+      value: 'Weight (r = +0.91)',
+      sub: 'Lifestyle: Age, FCVC, NCP, FAF',
       icon: Flame,
       color: '#ef4444',
       bgColor: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
@@ -186,22 +196,84 @@ export const ReportsAnalytics = () => {
               Koefisien korelasi Pearson (r) variabel FAF, TUE, FCVC, dan FAVC
             </p>
           </div>
-          <CorrelationHeatmap />
+          <CorrelationHeatmap correlationData={mlMeta?.correlation_matrix} />
         </div>
 
         {/* Feature Importance ML */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5">
           <div className="mb-4">
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              Feature Importance (Model Machine Learning)
+              Feature Importance — Ablation Study (Skenario A vs B)
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Bobot kontribusi variabel terhadap keputusan klasifikasi Random Forest
+              Bandingkan dominasi BMI pada Skenario A vs faktor gaya hidup murni pada Skenario B
             </p>
           </div>
-          <FeatureBarChart />
+          <FeatureBarChart featureImportance={mlMeta?.feature_importance} />
         </div>
       </div>
+
+      {/* Row 2.5: A/B Testing (Ablation Study) Table */}
+      {mlMeta?.ab_experiments && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Hasil Eksperimen A/B Testing (Ablation Study) &amp; Hyperparameter Tuning
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Dataset UCI Obesity Levels ({mlMeta.dataset?.clean_rows} sampel bersih, split 80/20 stratified, 5-Fold CV)
+              </p>
+            </div>
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              Live dari prediction-service
+            </span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/60 text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">
+                  <th className="px-3.5 py-2.5">Model</th>
+                  <th className="px-3.5 py-2.5">Skenario</th>
+                  <th className="px-3.5 py-2.5 text-center">Fitur</th>
+                  <th className="px-3.5 py-2.5 text-right">5-Fold CV F1</th>
+                  <th className="px-3.5 py-2.5 text-right">Test Accuracy</th>
+                  <th className="px-3.5 py-2.5 text-right">Weighted F1</th>
+                  <th className="px-3.5 py-2.5 text-right">Error Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                {mlMeta.ab_experiments.map((row, idx) => {
+                  const isTuned = row.model.includes('Tuned');
+                  return (
+                    <tr
+                      key={idx}
+                      className={
+                        isTuned
+                          ? 'bg-blue-50/40 dark:bg-blue-950/20 font-semibold'
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'
+                      }
+                    >
+                      <td className="px-3.5 py-2.5 font-bold text-slate-900 dark:text-white">{row.model}</td>
+                      <td className="px-3.5 py-2.5">{row.scenario}</td>
+                      <td className="px-3.5 py-2.5 text-center font-mono">{row.feature_count}</td>
+                      <td className="px-3.5 py-2.5 text-right font-mono">{row.cv_f1_score ?? '-'}</td>
+                      <td className="px-3.5 py-2.5 text-right font-mono font-bold text-blue-600 dark:text-blue-400">
+                        {row.test_accuracy}%
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right font-mono">{row.test_f1_score}</td>
+                      <td className="px-3.5 py-2.5 text-right font-mono text-slate-500">
+                        {row.error_rate}% ({row.misclassified}/{row.test_samples})
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Row 3: Clinical Insights Section */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5">

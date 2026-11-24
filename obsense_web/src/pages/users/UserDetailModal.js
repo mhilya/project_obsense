@@ -1,36 +1,54 @@
-import React, { useState, useEffect } from 'react';
-import { X, User, Calendar, Activity } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, User, Calendar, Activity, Cpu, Sparkles } from 'lucide-react';
 import assessmentService from '../../services/assessmentService';
 import cycleService from '../../services/cycleService';
+import predictionService from '../../services/predictionService';
+import { apiErrorMessage } from '../../services/userService';
+import { useNotification } from '../../context/NotificationContext';
 import { OBESITY_CLASSES } from '../../mock/mockData';
 
 export const UserDetailModal = ({ isOpen, user, onClose, onEdit }) => {
+  const { showSuccess, showError } = useNotification();
   const [activeTab, setActiveTab] = useState('profile');
   const [assessments, setAssessments] = useState([]);
   const [dailyLogs, setDailyLogs] = useState([]);
   const [loadError, setLoadError] = useState('');
+  const [predicting, setPredicting] = useState(false);
+
+  const loadHistory = useCallback(async () => {
+    if (!user) return;
+    setLoadError('');
+    try {
+      const [a, l] = await Promise.all([
+        assessmentService.getAssessments({ user_id: user.id }),
+        cycleService.getDailyLogs({ user_id: user.id })
+      ]);
+      setAssessments(a);
+      setDailyLogs([...l].sort((x, y) => (x.log_date < y.log_date ? -1 : 1)));
+    } catch (err) {
+      setLoadError(apiErrorMessage(err));
+    }
+  }, [user]);
 
   useEffect(() => {
-    if (!isOpen || !user) return undefined;
-    let cancelled = false;
-    setLoadError('');
-    Promise.all([
-      assessmentService.getAssessments({ user_id: user.id }),
-      cycleService.getDailyLogs({ user_id: user.id })
-    ])
-      .then(([a, l]) => {
-        if (cancelled) return;
-        setAssessments(a);
-        // tampilkan berurutan dari hari pertama
-        setDailyLogs([...l].sort((x, y) => (x.log_date < y.log_date ? -1 : 1)));
-      })
-      .catch((err) => {
-        if (!cancelled) setLoadError(err.response?.data?.message || err.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, user]);
+    if (!isOpen || !user) return;
+    loadHistory();
+  }, [isOpen, user, loadHistory]);
+
+  const handleRunPrediction = async () => {
+    if (!user) return;
+    setPredicting(true);
+    try {
+      const res = await predictionService.predictFromCycle({ user_id: user.id });
+      const clsLabel = (res.data?.obesity_class || '').replace(/_/g, ' ');
+      showSuccess(`Prediksi ML selesai: ${clsLabel}`);
+      await loadHistory();
+    } catch (err) {
+      showError('Gagal menjalankan prediksi ML: ' + apiErrorMessage(err));
+    } finally {
+      setPredicting(false);
+    }
+  };
 
   if (!isOpen || !user) return null;
 
@@ -227,64 +245,139 @@ export const UserDetailModal = ({ isOpen, user, onClose, onEdit }) => {
           {/* TAB 2: Riwayat Prediksi */}
           {activeTab === 'assessments' && (
             <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200/80 bg-blue-50/50 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+                <div className="text-xs text-slate-600 dark:text-slate-300">
+                  Jalankan inferensi Random Forest (Skenario A + Skenario B &amp; SHAP) dari siklus terbaru pasien ini.
+                </div>
+                <button
+                  type="button"
+                  disabled={predicting}
+                  onClick={handleRunPrediction}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-500 disabled:opacity-50"
+                >
+                  <Cpu size={14} />
+                  <span>{predicting ? 'Memproses...' : 'Jalankan Prediksi ML'}</span>
+                </button>
+              </div>
+
               {assessments.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-400">
                   Belum ada riwayat asesmen selesai untuk pengguna ini.
                 </div>
               ) : (
-                assessments.map((item) => (
-                  <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3 dark:border-slate-800 dark:bg-slate-800/40">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">Hasil Prediksi Model #{item.id}</h4>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Model: {item.model_version} • Tanggal: {item.assessment_date}
+                assessments.map((item) => {
+                  const life = item.lifestyle_prediction;
+                  const shapList = Array.isArray(item.shap_factors) ? item.shap_factors : [];
+                  return (
+                    <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3 dark:border-slate-800 dark:bg-slate-800/40">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">Hasil Prediksi Model #{item.id}</h4>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Model: {item.model_version} • Tanggal: {item.assessment_date}
+                          </span>
+                        </div>
+                        <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">
+                          {item.risk_level} Risk
                         </span>
                       </div>
-                      <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">
-                        {item.risk_level} Risk
-                      </span>
-                    </div>
 
-                    <div>
-                      <h5 className="text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-2">Distribusi Probabilitas 7 Kelas:</h5>
-                      <div className="space-y-1.5">
-                        {item.probability_scores &&
-                          Object.entries(item.probability_scores).map(([k, prob]) => {
-                            const cls = OBESITY_CLASSES.find((c) => c.key === k);
-                            return (
-                              <div key={k} className="flex items-center gap-2 text-[11px]">
-                                <span className="w-36 truncate text-slate-500 dark:text-slate-400">{cls?.label || k}</span>
-                                <div className="h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden dark:bg-slate-700">
-                                  <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                      width: `${(prob * 100).toFixed(1)}%`,
-                                      backgroundColor: cls?.color || '#3b82f6'
-                                    }}
-                                  />
-                                </div>
-                                <span className="w-10 text-right font-mono font-bold text-slate-700 dark:text-slate-300">
-                                  {(prob * 100).toFixed(1)}%
+                      {/* Dual-Scenario Comparison (Skenario A vs Skenario B) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div className="rounded-lg border border-blue-200/70 bg-white p-2.5 dark:border-blue-900/40 dark:bg-slate-900">
+                          <span className="block text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400">
+                            Skenario A (Full / Klinis)
+                          </span>
+                          <strong className="block text-xs font-extrabold text-slate-900 dark:text-white mt-0.5">
+                            {(item.obesity_class || '-').replace(/_/g, ' ')}
+                          </strong>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            BMI: {item.bmi ?? '-'} • Risiko: {item.risk_level}
+                          </span>
+                        </div>
+
+                        {life && (
+                          <div className="rounded-lg border border-emerald-200/70 bg-white p-2.5 dark:border-emerald-900/40 dark:bg-slate-900">
+                            <span className="block text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
+                              Skenario B (Lifestyle-Only)
+                            </span>
+                            <strong className="block text-xs font-extrabold text-slate-900 dark:text-white mt-0.5">
+                              {(life.obesity_class || '-').replace(/_/g, ' ')}
+                            </strong>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              Murni pola hidup • Risiko: {life.risk_level}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Top SHAP Factors */}
+                      {shapList.length > 0 && (
+                        <div className="rounded-lg border border-slate-200/70 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <h5 className="flex items-center gap-1 text-[11px] font-bold text-slate-800 dark:text-slate-200 mb-2">
+                            <Sparkles size={12} className="text-purple-500" />
+                            <span>Faktor Pendorong Gaya Hidup (SHAP):</span>
+                          </h5>
+                          <div className="flex flex-wrap gap-1.5">
+                            {shapList.map((f, i) => (
+                              <span
+                                key={f.feature || i}
+                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+                                  f.impact === 'risk_up'
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/50'
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/50'
+                                }`}
+                              >
+                                <span>{f.label || f.feature}</span>
+                                <span className="font-mono opacity-80">
+                                  ({f.shap_value >= 0 ? `+${f.shap_value}` : f.shap_value})
                                 </span>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
-                    {item.recommendations && (
-                      <div className="rounded-lg bg-white p-3 border border-slate-200/60 dark:border-slate-700 dark:bg-slate-900">
-                        <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-200 mb-1">Rekomendasi Klinis:</h5>
-                        <ul className="list-disc list-inside space-y-0.5 text-xs text-slate-600 dark:text-slate-300">
-                          {item.recommendations.map((rec, i) => (
-                            <li key={i}>{rec}</li>
-                          ))}
-                        </ul>
+                      <div>
+                        <h5 className="text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-2">Distribusi Probabilitas 7 Kelas:</h5>
+                        <div className="space-y-1.5">
+                          {item.probability_scores &&
+                            Object.entries(item.probability_scores).map(([k, prob]) => {
+                              const cls = OBESITY_CLASSES.find((c) => c.key === k);
+                              return (
+                                <div key={k} className="flex items-center gap-2 text-[11px]">
+                                  <span className="w-36 truncate text-slate-500 dark:text-slate-400">{cls?.label || k}</span>
+                                  <div className="h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden dark:bg-slate-700">
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{
+                                        width: `${(prob * 100).toFixed(1)}%`,
+                                        backgroundColor: cls?.color || '#3b82f6'
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="w-10 text-right font-mono font-bold text-slate-700 dark:text-slate-300">
+                                    {(prob * 100).toFixed(1)}%
+                                  </span>
+                                </div>
+                              );
+                            })}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))
+
+                      {item.recommendations && (
+                        <div className="rounded-lg bg-white p-3 border border-slate-200/60 dark:border-slate-700 dark:bg-slate-900">
+                          <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-200 mb-1">Rekomendasi Klinis:</h5>
+                          <ul className="list-disc list-inside space-y-0.5 text-xs text-slate-600 dark:text-slate-300">
+                            {item.recommendations.map((rec, i) => (
+                              <li key={i}>{rec}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
           )}
