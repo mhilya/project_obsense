@@ -6,7 +6,9 @@
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
+  ForgotPassword: undefined;
   Main: undefined;
+  AssessmentResult: { assessmentId?: number } | undefined;
 };
 
 export type BottomTabParamList = {

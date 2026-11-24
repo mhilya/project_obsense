@@ -8,16 +8,24 @@ import {
   Pressable,
   ActivityIndicator,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Logo from '../components/Logo';
 import CustomButton from '../components/CustomButton';
-import { BottomTabParamList } from '../types/navigation';
+import { BottomTabParamList, RootStackParamList } from '../types/navigation';
 import { Colors, Spacing } from '../theme';
 import styles from '../styles/HealthCheckScreen.styles';
+import { authenticatedRequest } from '../utils/api';
+import { getToken } from '../utils/authStorage';
 
-type Props = BottomTabScreenProps<BottomTabParamList, 'HealthCheck'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<BottomTabParamList, 'HealthCheck'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 const GENDER_OPTIONS = ['Laki-laki', 'Perempuan'];
 const ACTIVITY_LEVELS = ['Ringan', 'Sedang', 'Berat'];
@@ -56,64 +64,62 @@ export default function HealthCheckScreen({ navigation }: Props) {
     return 0;
   }, [tinggiBadan, beratBadan]);
 
-  const getBMICategory = (bmiValue: number) => {
-    if (bmiValue < 18.5) return { text: 'Berat badan kurang', type: 'warning', color: Colors.warning };
-    if (bmiValue < 25) return { text: 'Berat badan ideal', type: 'good', color: Colors.success };
-    if (bmiValue < 30) return { text: 'Berat badan berlebih', type: 'warning', color: Colors.warning };
-    return { text: 'Obesitas', type: 'danger', color: Colors.danger };
-  };
-
-  const getRiskLevel = () => {
-    let riskScore = 0;
-    if (bmi >= 30) riskScore += 3;
-    else if (bmi >= 25) riskScore += 2;
-    else if (bmi < 18.5) riskScore += 1;
-    
-    if (Number(usia) > 40) riskScore += 1;
-    if (riwayatKeluarga === 'Ya') riskScore += 2;
-    if (makananCepat === 'Sering' || makananCepat === 'Selalu') riskScore += 1;
-    if (aktivitasFisik === 'Ringan') riskScore += 1;
-    if (merokok === 'Ya') riskScore += 2;
-
-    if (riskScore >= 6) return { level: 'Tinggi', color: Colors.danger, desc: 'Risiko tinggi penyakit metabolik. Segera konsultasi dengan tenaga kesehatan.' };
-    if (riskScore >= 3) return { level: 'Sedang', color: Colors.warning, desc: 'Risiko sedang. Perlu perhatian pada pola makan dan aktivitas fisik.' };
-    return { level: 'Rendah', color: Colors.success, desc: 'Risiko rendah. Pertahankan gaya hidup sehat Anda.' };
-  };
-
-  const getRecommendations = () => {
-    const recommendations = [];
-    const category = getBMICategory(bmi);
-    
-    if (category.type === 'danger' || category.type === 'warning') {
-      recommendations.push({ icon: 'restaurant', text: 'Kurangi porsi makan dan perbanyak sayur' });
-      recommendations.push({ icon: 'directions-run', text: 'Olahraga minimal 30 menit, 5x seminggu' });
-    }
-    if (makananCepat === 'Sering' || makananCepat === 'Selalu') {
-      recommendations.push({ icon: 'no-meals', text: 'Batasi makanan cepat saji maksimal 1x seminggu' });
-    }
-    if (aktivitasFisik === 'Ringan') {
-      recommendations.push({ icon: 'fitness-center', text: 'Tingkatkan aktivitas fisik bertahap' });
-    }
-    if (Number(durasiTidur) < 7) {
-      recommendations.push({ icon: 'bedtime', text: 'Tidur cukup 7-8 jam per hari' });
-    }
-    if (merokok === 'Ya') {
-      recommendations.push({ icon: 'smoke-free', text: 'Segera hentikan kebiasaan merokok' });
-    }
-    if (stres === 'Berat') {
-      recommendations.push({ icon: 'self-improvement', text: 'Kelola stres dengan meditasi atau yoga' });
-    }
-
-    return recommendations;
-  };
-
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step === 3) {
       setCalculating(true);
-      setTimeout(() => {
+      try {
+        const token = await getToken();
+        if (!token) {
+          Alert.alert('Error', 'Token tidak ditemukan. Silakan login kembali.');
+          navigation.navigate('Login');
+          return;
+        }
+
+        // Prepare form data for cycle creation/update
+        const cycleData = {
+          // Form 1: Genetik & Fisik
+          family_history_with_overweight: riwayatKeluarga === 'Ya',
+          
+          // Form 2: Pola Konsumsi
+          FCVC: sayurBuah === 'Selalu' ? 3 : sayurBuah === 'Sering' ? 2 : sayurBuah === 'Kadang-kadang' ? 1 : 0,
+          NCP: 3, // Default main meals
+          CAEC: makananCepat === 'Selalu' ? 3 : makananCepat === 'Sering' ? 2 : makananCepat === 'Kadang-kadang' ? 1 : 0,
+          CH2O: minumManis === 'Jarang' ? 2 : 1, // Inverse for water consumption
+          
+          // Form 3: Gaya Hidup
+          FAF: aktivitasFisik === 'Berat' ? 3 : aktivitasFisik === 'Sedang' ? 2 : 1,
+          TUE: Number(durasiTidur) < 7 ? 2 : 1, // Screen time (inverse of sleep)
+          SMOKE: merokok === 'Ya',
+          SCC: false, // Default: not monitoring calories
+          CALC: 'no', // Default: no alcohol
+          MTRANS: 'Public_Transportation', // Default transportation
+        };
+
+        // Save cycle data (you may need to implement this endpoint or update existing one)
+        const cycleResult = await authenticatedRequest(
+          '/cycles',
+          token,
+          {
+            method: 'POST',
+            body: JSON.stringify(cycleData),
+          }
+        );
+
+        if (!cycleResult.success) {
+          Alert.alert('Error', cycleResult.error || 'Gagal menyimpan data siklus');
+          setCalculating(false);
+          return;
+        }
+
+        // Navigate to AssessmentResultScreen
+        // The screen will trigger the prediction automatically
+        navigation.navigate('AssessmentResult', undefined);
+      } catch (error) {
+        console.error('Error saving cycle data:', error);
+        Alert.alert('Error', 'Terjadi kesalahan saat menyimpan data');
+      } finally {
         setCalculating(false);
-        setStep(4);
-      }, 2000);
+      }
     } else {
       setStep(step + 1);
     }
@@ -130,10 +136,6 @@ export default function HealthCheckScreen({ navigation }: Props) {
   const isStep1Valid = nama.trim() && usia && tinggiBadan && beratBadan;
   const isStep2Valid = true;
   const isStep3Valid = durasiTidur;
-
-  const category = getBMICategory(bmi);
-  const risk = getRiskLevel();
-  const recommendations = getRecommendations();
 
   return (
     <>
@@ -155,19 +157,15 @@ export default function HealthCheckScreen({ navigation }: Props) {
           <View style={styles.intro}>
             <Text style={styles.eyebrow}>Asesmen Risiko Kesehatan</Text>
             <Text style={styles.title}>
-              {step === 1 ? 'Data Genetik & Fisik' : step === 2 ? 'Pola Konsumsi' : step === 3 ? 'Gaya Hidup' : 'Hasil Analisis'}
+              {step === 1 ? 'Data Genetik & Fisik' : step === 2 ? 'Pola Konsumsi' : 'Gaya Hidup'}
             </Text>
-            {step < 4 && (
-              <Text style={styles.subtitle}>Langkah {step} dari 3</Text>
-            )}
+            <Text style={styles.subtitle}>Langkah {step} dari 3</Text>
           </View>
 
           {/* Progress Indicator */}
-          {step < 4 && (
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
-            </View>
-          )}
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
+          </View>
 
           {step === 1 && (
             <View style={styles.formCard}>
@@ -301,7 +299,7 @@ export default function HealthCheckScreen({ navigation }: Props) {
 
               <View style={{ marginTop: Spacing.base }}>
                 <CustomButton 
-                  title={calculating ? 'Menganalisis...' : 'Analisis Sekarang'} 
+                  title={calculating ? 'Menyimpan & Menganalisis...' : 'Selesai & Lihat Hasil'} 
                   onPress={handleNext} 
                   variant="primary" 
                   disabled={!isStep3Valid || calculating} 
@@ -309,43 +307,6 @@ export default function HealthCheckScreen({ navigation }: Props) {
                 />
               </View>
             </View>
-          )}
-
-          {step === 4 && (
-            <>
-              <View style={[styles.resultCard, { borderColor: category.color }]}>
-                <Icon name="monitor-weight" size={48} color={category.color} />
-                <Text style={styles.resultLabel}>Indeks Massa Tubuh (BMI)</Text>
-                <Text style={styles.resultValue}>{bmi.toFixed(1)}</Text>
-                <View style={[styles.resultBadge, { backgroundColor: category.color + '20' }]}>
-                  <Text style={[styles.resultBadgeText, { color: category.color }]}>{category.text}</Text>
-                </View>
-              </View>
-
-              <View style={[styles.resultCard, { borderColor: risk.color }]}>
-                <Icon name="warning" size={48} color={risk.color} />
-                <Text style={styles.resultLabel}>Tingkat Risiko</Text>
-                <Text style={styles.resultValue}>{risk.level}</Text>
-                <Text style={styles.resultDesc}>{risk.desc}</Text>
-              </View>
-
-              <View style={styles.recommendCard}>
-                <Text style={styles.recommendTitle}>Rekomendasi Intervensi</Text>
-                {recommendations.map((rec, idx) => (
-                  <View key={idx} style={styles.recommendItem}>
-                    <View style={styles.recommendIcon}>
-                      <Icon name={rec.icon} size={20} color={Colors.primary} />
-                    </View>
-                    <Text style={styles.recommendText}>{rec.text}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <View style={{ gap: Spacing.sm }}>
-                <CustomButton title="Lihat Monitoring" onPress={() => navigation.navigate('Monitoring')} variant="primary" iconName="arrow-forward" />
-                <CustomButton title="Kembali ke Dashboard" onPress={() => navigation.navigate('Home')} variant="secondary" />
-              </View>
-            </>
           )}
         </ScrollView>
       </View>
