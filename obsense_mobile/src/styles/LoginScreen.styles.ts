@@ -115,6 +115,10 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     marginBottom: Spacing.lg,
   },
+  loginButtonDisabled: {
+    backgroundColor: Colors.textMuted,
+    opacity: 0.6,
+  },
   loginButtonText: {
     fontSize: FontSize.base,
     fontWeight: FontWeight.bold,

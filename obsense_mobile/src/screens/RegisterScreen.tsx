@@ -7,13 +7,16 @@ import {
   ScrollView,
   StatusBar,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Logo from '../components/Logo';
+import CustomAlert, { AlertType } from '../components/CustomAlert';
 import { Colors } from '../theme';
 import styles from '../styles/RegisterScreen.styles';
+import { registerUser } from '../utils/authStorage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
@@ -23,11 +26,86 @@ export default function RegisterScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertType, setAlertType] = useState<AlertType>('error');
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
 
-  const handleRegister = () => {
-    // TODO: Add validation and registration
-    if (agreeTerms) {
-      navigation.replace('Main');
+  const showAlert = (type: AlertType, title: string, message: string, onClose?: () => void) => {
+    setAlertType(type);
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
+
+  const handleRegister = async () => {
+    // Validasi input
+    if (!nama.trim() || !email.trim() || !password.trim()) {
+      showAlert('warning', 'Perhatian', 'Semua field harus diisi');
+      return;
+    }
+
+    // Validasi format email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showAlert('error', 'Email Tidak Valid', 'Format email tidak valid. Contoh: nama@email.com');
+      return;
+    }
+
+    // Validasi password minimal 8 karakter
+    if (password.length < 8) {
+      showAlert('warning', 'Password Terlalu Pendek', 'Password harus minimal 8 karakter');
+      return;
+    }
+
+    if (!agreeTerms) {
+      showAlert('warning', 'Syarat dan Ketentuan', 'Anda harus menyetujui syarat dan ketentuan untuk melanjutkan');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Fase 0-2: Hanya kirim name, email, password
+      // Field lain akan ke user-service di Fase 3
+      const result = await registerUser({
+        name: nama.trim(),
+        email: email.trim(),
+        password: password,
+      });
+      
+      if (result.success) {
+        // Registrasi berhasil - backend tidak return token di register
+        showAlert(
+          'success',
+          'Registrasi Berhasil!',
+          'Akun berhasil dibuat. Silakan login untuk melanjutkan.'
+        );
+        // Navigate setelah user tutup alert
+        setTimeout(() => {
+          setAlertVisible(false);
+          navigation.navigate('Login');
+        }, 2000);
+      } else {
+        // Registrasi gagal
+        showAlert(
+          'error',
+          'Registrasi Gagal',
+          result.error || 'Email sudah terdaftar atau terjadi kesalahan.'
+        );
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      showAlert(
+        'error',
+        'Kesalahan Koneksi',
+        'Terjadi kesalahan saat mendaftar. Pastikan backend sudah berjalan.'
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -66,6 +144,7 @@ export default function RegisterScreen({ navigation }: Props) {
               value={nama}
               onChangeText={setNama}
               autoCapitalize="words"
+              editable={!loading}
             />
           </View>
         </View>
@@ -84,6 +163,7 @@ export default function RegisterScreen({ navigation }: Props) {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!loading}
             />
           </View>
         </View>
@@ -102,10 +182,12 @@ export default function RegisterScreen({ navigation }: Props) {
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!loading}
             />
             <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}
               style={styles.eyeButton}
+              disabled={loading}
             >
               <Text style={styles.eyeButtonText}>
                 {showPassword ? 'Sembunyikan' : 'Lihat'}
@@ -118,6 +200,7 @@ export default function RegisterScreen({ navigation }: Props) {
         <Pressable
           style={styles.termsContainer}
           onPress={() => setAgreeTerms(!agreeTerms)}
+          disabled={loading}
         >
           <View
             style={[styles.checkbox, agreeTerms && styles.checkboxChecked]}
@@ -135,24 +218,42 @@ export default function RegisterScreen({ navigation }: Props) {
         <TouchableOpacity
           style={[
             styles.registerButton,
-            !agreeTerms && styles.registerButtonDisabled,
+            (!agreeTerms || loading) && styles.registerButtonDisabled,
           ]}
           onPress={handleRegister}
-          disabled={!agreeTerms}
+          disabled={!agreeTerms || loading}
           activeOpacity={0.9}
         >
-          <Text style={styles.registerButtonText}>Daftar sekarang</Text>
-          <Icon name="arrow-forward" size={20} color={Colors.white} />
+          {loading ? (
+            <ActivityIndicator color={Colors.white} />
+          ) : (
+            <>
+              <Text style={styles.registerButtonText}>Daftar sekarang</Text>
+              <Icon name="arrow-forward" size={20} color={Colors.white} />
+            </>
+          )}
         </TouchableOpacity>
 
         {/* Login Link */}
         <View style={styles.loginContainer}>
           <Text style={styles.loginText}>Sudah punya akun? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('Login')}
+            disabled={loading}
+          >
             <Text style={styles.loginLink}>Masuk</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertType}
+        title={alertTitle}
+        message={alertMessage}
+        buttons={[{ text: 'OK', onPress: () => setAlertVisible(false) }]}
+      />
     </>
   );
 }

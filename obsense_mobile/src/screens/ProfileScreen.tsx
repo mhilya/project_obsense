@@ -14,16 +14,14 @@ import Logo from '../components/Logo';
 
 import CustomButton from '../components/CustomButton';
 import MenuCard from '../components/MenuCard';
-import CustomDatePicker from '../components/CustomDatePicker';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 import CustomAlert, { AlertType, AlertButton } from '../components/CustomAlert';
 import { BottomTabParamList } from '../types/navigation';
 import { Colors } from '../theme';
 import styles from '../styles/ProfileScreen';
-import { getStoredUser, updateUserProfile, UserProfile } from '../utils/authStorage';
+import { getStoredUser, updateUserProfile, logout, changePassword, UserProfile } from '../utils/authStorage';
 
 type Props = BottomTabScreenProps<BottomTabParamList, 'Profile'>;
-
-const GENDER_OPTIONS = ['Laki-laki', 'Perempuan'];
 
 function ProfileScreen({ navigation }: Props): React.JSX.Element {
   const [loading, setLoading] = useState(true);
@@ -34,12 +32,11 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
   const [userData, setUserData] = useState<UserProfile | null>(null);
   
   // Form edit state
-  const [editUsername, setEditUsername] = useState('');
   const [editNama, setEditNama] = useState('');
   const [editEmail, setEditEmail] = useState('');
-  const [editTanggalLahir, setEditTanggalLahir] = useState<Date | null>(null);
-  const [editGender, setEditGender] = useState('');
-  const [editAlamat, setEditAlamat] = useState('');
+
+  // Modal state
+  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
 
   // Alert state
   const [alertVisible, setAlertVisible] = useState(false);
@@ -58,13 +55,8 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
       const user = await getStoredUser();
       if (user) {
         setUserData(user);
-        // Set form edit values
-        setEditUsername(user.username);
-        setEditNama(user.nama);
+        setEditNama(user.name);
         setEditEmail(user.email);
-        setEditTanggalLahir(new Date(user.tanggalLahir));
-        setEditGender(user.gender);
-        setEditAlamat(user.alamat);
       }
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -93,57 +85,64 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
   const handleCancelEdit = () => {
     // Reset form to original data
     if (userData) {
-      setEditUsername(userData.username);
-      setEditNama(userData.nama);
+      setEditNama(userData.name);
       setEditEmail(userData.email);
-      setEditTanggalLahir(new Date(userData.tanggalLahir));
-      setEditGender(userData.gender);
-      setEditAlamat(userData.alamat);
     }
     setEditMode(false);
   };
 
   const handleSaveEdit = async () => {
-    if (
-      !editUsername.trim() ||
-      !editNama.trim() ||
-      !editEmail.trim() ||
-      !editTanggalLahir ||
-      !editGender.trim() ||
-      !editAlamat.trim()
-    ) {
-      showAlert('warning', 'Perhatian', 'Semua field harus diisi.');
+    // Validasi input
+    if (!editNama.trim()) {
+      showAlert('warning', 'Perhatian', 'Nama tidak boleh kosong');
+      return;
+    }
+
+    if (!editEmail.trim()) {
+      showAlert('warning', 'Perhatian', 'Email tidak boleh kosong');
+      return;
+    }
+
+    // Validasi format email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(editEmail)) {
+      showAlert('error', 'Email Tidak Valid', 'Format email tidak valid. Contoh: nama@email.com');
       return;
     }
 
     try {
       setSaving(true);
-      const updatedData = {
-        username: editUsername.trim(),
-        nama: editNama.trim(),
+      
+      const result = await updateUserProfile({
+        name: editNama.trim(),
         email: editEmail.trim(),
-        tanggalLahir: editTanggalLahir.toISOString(),
-        gender: editGender,
-        alamat: editAlamat.trim(),
-      };
-
-      const success = await updateUserProfile(updatedData);
-      if (success) {
-        await loadUserData();
+      });
+      
+      if (result.success && result.user) {
+        setUserData(result.user);
         setEditMode(false);
-        showAlert('success', 'Berhasil', 'Profil berhasil diperbarui.');
+        showAlert('success', 'Berhasil!', 'Profil berhasil diperbarui');
       } else {
-        showAlert('error', 'Gagal', 'Gagal memperbarui profil. Silakan coba lagi.');
+        showAlert('error', 'Gagal Memperbarui', result.error || 'Gagal memperbarui profil. Silakan coba lagi.');
       }
     } catch (error) {
       console.error('Error saving profile:', error);
-      showAlert('error', 'Error', 'Terjadi kesalahan. Silakan coba lagi.');
+      showAlert('error', 'Kesalahan', 'Terjadi kesalahan saat menyimpan. Silakan coba lagi.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleLogout = () => {
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+    return await changePassword(currentPassword, newPassword);
+  };
+
+  const handlePasswordChangeSuccess = () => {
+    setChangePasswordModalVisible(false);
+    showAlert('success', 'Berhasil!', 'Password berhasil diubah');
+  };
+
+  const handleLogout = async () => {
     showAlert(
       'confirm',
       'Keluar',
@@ -153,9 +152,16 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
         {
           text: 'Keluar',
           style: 'destructive',
-          onPress: () => {
-            // @ts-ignore - navigate to Login (root navigator)
-            navigation.getParent()?.navigate('Login');
+          onPress: async () => {
+            try {
+              // Hapus token dan user data
+              await logout();
+              // Navigate ke Login
+              // @ts-ignore - navigate to Login (root navigator)
+              navigation.getParent()?.navigate('Login');
+            } catch (error) {
+              console.error('Error during logout:', error);
+            }
           },
         },
       ],
@@ -224,13 +230,13 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
               <View style={styles.avatarCard}>
                 <View style={styles.avatarCircle}>
                   <Text style={styles.avatarInitial}>
-                    {userData.nama.charAt(0).toUpperCase()}
+                    {userData.name.charAt(0).toUpperCase()}
                   </Text>
                 </View>
-                <Text style={styles.userName}>{userData.nama}</Text>
+                <Text style={styles.userName}>{userData.name}</Text>
                 <Text style={styles.userEmail}>{userData.email}</Text>
                 <View style={styles.roleBadge}>
-                  <Text style={styles.roleText}>@{userData.username}</Text>
+                  <Text style={styles.roleText}>@user{userData.id}</Text>
                 </View>
               </View>
 
@@ -239,36 +245,33 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
                 <View style={styles.statItem}>
                   <Icon name="calendar-today" size={20} color={Colors.primary} />
                   <Text style={styles.statLabel}>Bergabung</Text>
-                  <Text style={styles.statValue}>{getJoinMonth(userData.createdAt)}</Text>
+                  <Text style={styles.statValue}>
+                    {userData.created_at ? getJoinMonth(userData.created_at) : 'Baru saja'}
+                  </Text>
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statItem}>
-                  <Icon name="cake" size={20} color={Colors.primary} />
-                  <Text style={styles.statLabel}>Tanggal Lahir</Text>
-                  <Text style={styles.statValue}>{formatDate(userData.tanggalLahir)}</Text>
+                  <Icon name="person" size={20} color={Colors.primary} />
+                  <Text style={styles.statLabel}>Role</Text>
+                  <Text style={styles.statValue}>{userData.role}</Text>
                 </View>
               </View>
+
+              {/* NOTE: Field profil lengkap akan tersedia di Fase 3 (user-service) */}
 
               {/* ── Info section ── */}
               <Text style={styles.sectionTitle}>Informasi Pribadi</Text>
               
-              <View style={styles.infoCard}>
+              {/* Fase 0-2: Data profil lengkap belum tersedia dari backend */}
+              {/* <View style={styles.infoCard}>
                 <View style={styles.infoRow}>
                   <Icon name="person" size={20} color={Colors.textMuted} />
                   <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Gender</Text>
-                    <Text style={styles.infoValue}>{userData.gender}</Text>
+                    <Text style={styles.infoValue}>Akan tersedia di Fase 3</Text>
                   </View>
                 </View>
-                <View style={styles.infoDivider} />
-                <View style={styles.infoRow}>
-                  <Icon name="location-on" size={20} color={Colors.textMuted} />
-                  <View style={styles.infoContent}>
-                    <Text style={styles.infoLabel}>Alamat</Text>
-                    <Text style={styles.infoValue}>{userData.alamat}</Text>
-                  </View>
-                </View>
-              </View>
+              </View> */}
 
               {/* ── Account section ── */}
               <Text style={styles.sectionTitle}>Akun</Text>
@@ -285,7 +288,7 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
                 subtitle="Perbarui keamanan akun"
                 iconColor={Colors.warning}
                 iconBg={Colors.warningLight}
-                onPress={() => showAlert('info', 'Ubah Password', 'Fitur ini segera hadir.')}
+                onPress={() => setChangePasswordModalVisible(true)}
               />
 
               {/* ── Logout ── */}
@@ -304,15 +307,6 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
               <Text style={styles.editTitle}>Edit Profil</Text>
 
               <View style={styles.editForm}>
-                <Text style={styles.label}>Username</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Masukkan username"
-                  value={editUsername}
-                  onChangeText={setEditUsername}
-                  autoCapitalize="none"
-                />
-
                 <Text style={styles.label}>Nama Lengkap</Text>
                 <TextInput
                   style={styles.input}
@@ -329,41 +323,6 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
                   onChangeText={setEditEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                />
-
-                <CustomDatePicker
-                  label="Tanggal Lahir"
-                  placeholder="Pilih tanggal lahir"
-                  value={editTanggalLahir}
-                  onChange={setEditTanggalLahir}
-                  maxDate={new Date()}
-                />
-
-                <Text style={styles.label}>Gender</Text>
-                <View style={styles.genderRow}>
-                  {GENDER_OPTIONS.map(opt => (
-                    <Pressable
-                      key={opt}
-                      style={[styles.genderBtn, editGender === opt && styles.genderBtnActive]}
-                      onPress={() => setEditGender(opt)}
-                      accessibilityRole="button"
-                    >
-                      <Text style={[styles.genderText, editGender === opt && styles.genderTextActive]}>
-                        {opt}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                <Text style={styles.label}>Alamat</Text>
-                <TextInput
-                  style={[styles.input, styles.inputMultiline]}
-                  placeholder="Masukkan alamat lengkap"
-                  value={editAlamat}
-                  onChangeText={setEditAlamat}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
                 />
 
                 <View style={styles.editActions}>
@@ -391,6 +350,13 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
           )}
         </ScrollView>
       </View>
+
+      <ChangePasswordModal
+        visible={changePasswordModalVisible}
+        onClose={() => setChangePasswordModalVisible(false)}
+        onSuccess={handlePasswordChangeSuccess}
+        onChangePassword={handleChangePassword}
+      />
 
       <CustomAlert
         visible={alertVisible}

@@ -221,6 +221,17 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     letterSpacing: 0.2,
   },
+  noteText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.base,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.base,
+    backgroundColor: Colors.backgroundDark,
+    borderRadius: Radius.md,
+  },
   input: {
     borderWidth: 1,
     borderColor: Colors.border,

@@ -4,8 +4,6 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import HomeScreen from '../screens/HomeScreen';
 import HealthCheckScreen from '../screens/HealthCheckScreen';
 import MonitoringScreen from '../screens/MonitoringScreen';
-import ArticlesScreen from '../screens/ArticlesScreen';
-import TrainingScreen from '../screens/TrainingScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { BottomTabParamList } from '../types/navigation';
 import { Colors } from '../theme';
@@ -59,26 +57,6 @@ const BottomTabNavigator = (): React.JSX.Element => (
         tabBarLabel: 'Monitoring',
         tabBarIcon: ({ color, size }) => (
           <Icon name="show-chart" size={size} color={color} />
-        ),
-      }}
-    />
-    <Tab.Screen 
-      name="Training" 
-      component={TrainingScreen}
-      options={{
-        tabBarLabel: 'Latihan',
-        tabBarIcon: ({ color, size }) => (
-          <Icon name="fitness-center" size={size} color={color} />
-        ),
-      }}
-    />
-    <Tab.Screen 
-      name="Articles" 
-      component={ArticlesScreen}
-      options={{
-        tabBarLabel: 'Artikel',
-        tabBarIcon: ({ color, size }) => (
-          <Icon name="article" size={size} color={color} />
         ),
       }}
     />

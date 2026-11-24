@@ -7,13 +7,16 @@ import {
   Pressable,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Logo from '../components/Logo';
+import CustomAlert, { AlertType } from '../components/CustomAlert';
 import { Colors } from '../theme';
 import styles from '../styles/LoginScreen.styles';
+import { loginUser } from '../utils/authStorage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -21,10 +24,60 @@ export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertType, setAlertType] = useState<AlertType>('error');
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
 
-  const handleLogin = () => {
-    // TODO: Add validation and authentication
-    navigation.replace('Main');
+  const showAlert = (type: AlertType, title: string, message: string) => {
+    setAlertType(type);
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
+
+  const handleLogin = async () => {
+    // Validasi input
+    if (!email.trim() || !password.trim()) {
+      showAlert('warning', 'Perhatian', 'Email dan password harus diisi');
+      return;
+    }
+
+    // Validasi format email sederhana
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showAlert('error', 'Email Tidak Valid', 'Format email tidak valid. Contoh: nama@email.com');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const result = await loginUser(email.trim(), password);
+      
+      if (result.success && result.user) {
+        // Login berhasil
+        navigation.replace('Main');
+      } else {
+        // Login gagal
+        showAlert(
+          'error',
+          'Login Gagal',
+          result.error || 'Email atau password salah. Silakan coba lagi.'
+        );
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      showAlert(
+        'error',
+        'Kesalahan Koneksi',
+        'Terjadi kesalahan saat login. Pastikan backend sudah berjalan.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -64,6 +117,7 @@ export default function LoginScreen({ navigation }: Props) {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!loading}
             />
           </View>
         </View>
@@ -82,10 +136,12 @@ export default function LoginScreen({ navigation }: Props) {
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!loading}
             />
             <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}
               style={styles.eyeButton}
+              disabled={loading}
             >
               <Text style={styles.eyeButtonText}>
                 {showPassword ? 'Sembunyikan' : 'Lihat'}
@@ -95,28 +151,47 @@ export default function LoginScreen({ navigation }: Props) {
         </View>
 
         {/* Forgot Password Link */}
-        <TouchableOpacity style={styles.forgotButton}>
+        <TouchableOpacity style={styles.forgotButton} disabled={loading}>
           <Text style={styles.forgotText}>Lupa kata sandi?</Text>
         </TouchableOpacity>
 
         {/* Login Button */}
         <TouchableOpacity
-          style={styles.loginButton}
+          style={[styles.loginButton, loading && styles.loginButtonDisabled]}
           onPress={handleLogin}
           activeOpacity={0.9}
+          disabled={loading}
         >
-          <Text style={styles.loginButtonText}>Masuk ke OBSENSE</Text>
-          <Icon name="arrow-forward" size={20} color={Colors.white} />
+          {loading ? (
+            <ActivityIndicator color={Colors.white} />
+          ) : (
+            <>
+              <Text style={styles.loginButtonText}>Masuk ke OBSENSE</Text>
+              <Icon name="arrow-forward" size={20} color={Colors.white} />
+            </>
+          )}
         </TouchableOpacity>
 
         {/* Register Link */}
         <View style={styles.registerContainer}>
           <Text style={styles.registerText}>Belum punya akun? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('Register')}
+            disabled={loading}
+          >
             <Text style={styles.registerLink}>Daftar</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertType}
+        title={alertTitle}
+        message={alertMessage}
+        buttons={[{ text: 'OK', onPress: () => setAlertVisible(false) }]}
+      />
     </>
   );
 }

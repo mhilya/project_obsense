@@ -50,7 +50,7 @@ export default function HomeScreen({ navigation }: Props) {
     try {
       const user = await getStoredUser();
       if (user) {
-        setUsername(user.nama || user.username);
+        setUsername(user.name); // Backend return 'name', bukan 'nama'
       }
     } catch (error) {
       console.error('Error loading data:', error);
