@@ -55,6 +55,10 @@ interface Assessment {
   updated_at: string;
 }
 
+interface AssessmentsResponse {
+  data: Assessment[];
+}
+
 interface AssessmentHistory {
   date: string;
   bmi?: number;
@@ -178,7 +182,7 @@ export default function MonitoringScreen({ navigation }: Props) {
       const token = await getToken();
       if (!token) {
         Alert.alert('Error', 'Token tidak ditemukan. Silakan login kembali.');
-        navigation.navigate('Login' as any);
+        navigation.navigate('Login');
         return;
       }
 
@@ -189,19 +193,31 @@ export default function MonitoringScreen({ navigation }: Props) {
       }
 
       // Fetch assessments
-      const result = await authenticatedRequest<{ data?: Assessment[]; success?: boolean }>(
+      const result = await authenticatedRequest<AssessmentsResponse>(
         '/assessments',
         token
       );
 
-      if (result.success && result.data) {
-        // Check if data is nested or direct array
-        const assessmentData = Array.isArray(result.data) 
-          ? result.data 
-          : (result.data as any).data || [];
-        
+      if (!result.success) {
+        // Handle 401 Unauthorized - expired or invalid token
+        if (result.statusCode === 401) {
+          Alert.alert('Sesi Berakhir', 'Silakan login kembali.', [
+            {
+              text: 'OK',
+              onPress: () => navigation.navigate('Login'),
+            },
+          ]);
+          return;
+        }
+        // Other errors
+        setError('Gagal memuat data. Silakan coba lagi.');
+        setAssessments([]);
+        return;
+      }
+
+      if (result.data?.data) {
         // Sort by date descending (latest first)
-        const sortedAssessments = assessmentData.sort((a: Assessment, b: Assessment) => {
+        const sortedAssessments = result.data.data.sort((a: Assessment, b: Assessment) => {
           return new Date(b.assessment_date).getTime() - new Date(a.assessment_date).getTime();
         });
         
@@ -372,7 +388,7 @@ export default function MonitoringScreen({ navigation }: Props) {
               </Text>
               <CustomButton
                 title="Mulai Health Check"
-                onPress={() => navigation.navigate('HealthCheck' as any)}
+                onPress={() => navigation.navigate('HealthCheck')}
                 variant="primary"
                 iconName="favorite"
               />
@@ -653,7 +669,7 @@ export default function MonitoringScreen({ navigation }: Props) {
                     key={assessment.id}
                     style={styles.tableRow}
                     onPress={() => {
-                      navigation.navigate('AssessmentResult' as any, {
+                      navigation.navigate('AssessmentResult', {
                         assessmentId: assessment.id,
                       });
                     }}
