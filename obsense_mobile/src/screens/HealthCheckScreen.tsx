@@ -33,7 +33,6 @@ export default function HealthCheckScreen({ navigation }: Props) {
   const [gender, setGender] = useState('Laki-laki');
   const [tinggiBadan, setTinggiBadan] = useState('');
   const [beratBadan, setBeratBadan] = useState('');
-  const [lingkarPinggang, setLingkarPinggang] = useState('');
   const [riwayatKeluarga, setRiwayatKeluarga] = useState('Tidak');
 
   // Form 2: Pola Konsumsi
@@ -128,7 +127,7 @@ export default function HealthCheckScreen({ navigation }: Props) {
     }
   };
 
-  const isStep1Valid = nama.trim() && usia && tinggiBadan && beratBadan && lingkarPinggang;
+  const isStep1Valid = nama.trim() && usia && tinggiBadan && beratBadan;
   const isStep2Valid = true;
   const isStep3Valid = durasiTidur;
 
@@ -204,9 +203,6 @@ export default function HealthCheckScreen({ navigation }: Props) {
                   <TextInput style={styles.input} placeholder="70" value={beratBadan} onChangeText={setBeratBadan} keyboardType="decimal-pad" />
                 </View>
               </View>
-
-              <Text style={styles.label}>Lingkar Pinggang (cm) *</Text>
-              <TextInput style={styles.input} placeholder="85" value={lingkarPinggang} onChangeText={setLingkarPinggang} keyboardType="number-pad" />
 
               <Text style={styles.label}>Riwayat Keluarga Obesitas/Diabetes *</Text>
               <View style={styles.optionRow}>
