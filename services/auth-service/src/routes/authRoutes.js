@@ -10,6 +10,8 @@ router.post('/admin/login', authController.adminLogin);
 
 // Terproteksi
 router.get('/me', authMiddleware, authController.getMe);
+router.put('/profile', authMiddleware, authController.updateProfile);
+router.put('/change-password', authMiddleware, authController.changePassword);
 
 // Manajemen admin (khusus super_admin)
 const adminController = require('../controllers/adminController');

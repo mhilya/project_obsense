@@ -138,3 +138,102 @@ exports.getMe = async (req, res) => {
     return res.status(500).json({ message: 'Gagal mengambil data profil.' });
   }
 };
+
+// UPDATE PROFILE (nama dan email)
+exports.updateProfile = async (req, res) => {
+  const { name, email } = req.body;
+  
+  if (!name || !email) {
+    return res.status(400).json({ message: 'Nama dan email wajib diisi.' });
+  }
+
+  try {
+    const isAdmin = req.user.type === 'admin';
+    const table = isAdmin ? 'admins' : 'users';
+    
+    // Cek apakah email sudah digunakan oleh user lain
+    const [existing] = await pool.query(
+      `SELECT id FROM ${table} WHERE email = ? AND id != ?`,
+      [email, req.user.id]
+    );
+    
+    if (existing.length > 0) {
+      return res.status(400).json({ message: 'Email sudah digunakan oleh akun lain.' });
+    }
+
+    // Update profile
+    await pool.query(
+      `UPDATE ${table} SET name = ?, email = ? WHERE id = ?`,
+      [name, email, req.user.id]
+    );
+
+    // Ambil data terbaru
+    const [rows] = await pool.query(
+      isAdmin
+        ? 'SELECT id, name, email, role, is_active, last_login_at, created_at FROM admins WHERE id = ?'
+        : 'SELECT id, name, email, role, created_at FROM users WHERE id = ?',
+      [req.user.id]
+    );
+
+    return res.json({
+      message: 'Profil berhasil diperbarui.',
+      user: rows[0],
+    });
+  } catch (error) {
+    console.error('updateProfile error:', error);
+    return res.status(500).json({ message: 'Gagal memperbarui profil.' });
+  }
+};
+
+// CHANGE PASSWORD
+exports.changePassword = async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: 'Password lama dan password baru wajib diisi.' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ message: 'Password baru minimal 6 karakter.' });
+  }
+
+  try {
+    const isAdmin = req.user.type === 'admin';
+    const table = isAdmin ? 'admins' : 'users';
+    
+    // Ambil password saat ini dari database
+    const [rows] = await pool.query(
+      `SELECT password FROM ${table} WHERE id = ?`,
+      [req.user.id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Akun tidak ditemukan.' });
+    }
+
+    const user = rows[0];
+
+    // Verifikasi password lama
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Password lama tidak sesuai.' });
+    }
+
+    // Hash password baru
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    await pool.query(
+      `UPDATE ${table} SET password = ? WHERE id = ?`,
+      [hashedNewPassword, req.user.id]
+    );
+
+    return res.json({
+      message: 'Password berhasil diubah.',
+    });
+  } catch (error) {
+    console.error('changePassword error:', error);
+    return res.status(500).json({ message: 'Gagal mengubah password.' });
+  }
+};
+
