@@ -14,7 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import Logo from '../components/Logo';
 import CustomButton from '../components/CustomButton';
 import { RootStackParamList } from '../types/navigation';
-import { Colors, Spacing } from '../theme';
+import { Colors } from '../theme';
 import styles from '../styles/AssessmentResultScreen.styles';
 import { authenticatedRequest } from '../utils/api';
 import { getToken } from '../utils/authStorage';
@@ -46,6 +46,7 @@ interface Assessment {
   scenario_b_lifestyle: ScenarioResult;
   top_shap_factors: ShapFactor[];
   recommendations: string[];
+  // Phase 5: Admin evaluations populated after doctor/nutritionist review
   admin_evaluations?: AdminEvaluation[];
 }
 
@@ -70,11 +71,13 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [history, setHistory] = useState<AssessmentHistory[]>([]);
   const [hasHeightWeight, setHasHeightWeight] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch assessment data
   const fetchAssessment = useCallback(async (assessmentId?: number) => {
     try {
       setLoading(true);
+      setError(null);
       const token = await getToken();
       if (!token) {
         Alert.alert('Error', 'Token tidak ditemukan. Silakan login kembali.');
@@ -103,7 +106,8 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
             token
           );
         } else {
-          Alert.alert('Info', 'Belum ada asesmen. Silakan lakukan analisis terlebih dahulu.');
+          // No assessments yet - this is not an error, just empty state
+          setAssessment(null);
           return;
         }
       }
@@ -111,12 +115,13 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
       if (result.success && result.data) {
         setAssessment(result.data);
         setHasHeightWeight(!!result.data.bmi && !!result.data.scenario_a_full);
+        setError(null);
       } else {
-        Alert.alert('Error', result.error || 'Gagal memuat data asesmen');
+        setError(result.error || 'Gagal memuat data asesmen');
       }
-    } catch (error) {
-      console.error('Error fetching assessment:', error);
-      Alert.alert('Error', 'Terjadi kesalahan saat memuat data');
+    } catch (err) {
+      console.error('Error fetching assessment:', err);
+      setError('Terjadi kesalahan saat memuat data');
     } finally {
       setLoading(false);
     }
@@ -135,20 +140,22 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
           id: item.id,
           assessment_date: item.assessment_date,
           bmi: item.bmi,
-          obesity_class: item.lifestyle_prediction?.obesity_class || 'N/A',
-          risk_level: item.lifestyle_prediction?.risk_level || 'N/A',
+          // Backend may return lifestyle_prediction as nested object or flat fields
+          obesity_class: item.lifestyle_prediction?.obesity_class || item.obesity_class || 'N/A',
+          risk_level: item.lifestyle_prediction?.risk_level || item.risk_level || 'N/A',
         }));
         setHistory(historyData);
       }
-    } catch (error) {
-      console.error('Error fetching history:', error);
+    } catch (err) {
+      console.error('Error fetching history:', err);
     }
   }, []);
 
   // Trigger new assessment
-  const handleAnalyzeRisk = async () => {
+  const handleAnalyzeRisk = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const token = await getToken();
       if (!token) {
         Alert.alert('Error', 'Token tidak ditemukan. Silakan login kembali.');
@@ -165,30 +172,31 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
       if (result.success && result.data) {
         setAssessment(result.data);
         setHasHeightWeight(!!result.data.bmi && !!result.data.scenario_a_full);
+        setError(null);
         fetchHistory(); // Refresh history
         Alert.alert('Sukses', 'Analisis risiko obesitas berhasil dilakukan!');
       } else {
-        if (result.error?.includes('404')) {
+        if (result.statusCode === 404) {
           Alert.alert(
             'Profil Belum Lengkap',
             'Silakan lengkapi profil Anda terlebih dahulu di menu Profil.'
           );
-        } else if (result.error?.includes('409')) {
+        } else if (result.statusCode === 409) {
           Alert.alert(
             'Data Tidak Cukup',
             'Belum ada siklus aktif atau data kebiasaan hidup belum lengkap. Lengkapi di Health Check terlebih dahulu.'
           );
         } else {
-          Alert.alert('Error', result.error || 'Gagal melakukan analisis');
+          setError(result.error || 'Gagal melakukan analisis');
         }
       }
-    } catch (error) {
-      console.error('Error analyzing risk:', error);
-      Alert.alert('Error', 'Terjadi kesalahan saat melakukan analisis');
+    } catch (err) {
+      console.error('Error analyzing risk:', err);
+      setError('Terjadi kesalahan saat melakukan analisis');
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigation, fetchHistory]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -200,9 +208,16 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
   }, [fetchAssessment, fetchHistory, route.params?.assessmentId]);
 
   useEffect(() => {
-    fetchAssessment(route.params?.assessmentId);
+    // If triggerPrediction flag is set, run prediction immediately
+    if (route.params?.triggerPrediction) {
+      handleAnalyzeRisk();
+    } else {
+      fetchAssessment(route.params?.assessmentId);
+    }
     fetchHistory();
-  }, [fetchAssessment, fetchHistory, route.params?.assessmentId]);
+    // Dependencies are managed via callbacks to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.assessmentId, route.params?.triggerPrediction]);
 
   const getRiskColor = (riskLevel: string) => {
     switch (riskLevel) {
@@ -234,6 +249,8 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
   };
 
   const getFeatureLabel = (feature: string) => {
+    // Note: These labels are hardcoded. If ML model features change,
+    // consider fetching from backend API or including translations in prediction response
     const labels: { [key: string]: string } = {
       'FCVC': 'Konsumsi Sayur',
       'NCP': 'Jumlah Makan Utama',
@@ -504,6 +521,24 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
                 </View>
               )}
             </>
+          ) : error ? (
+            <View style={styles.errorState}>
+              <Icon name="error-outline" size={64} color={Colors.danger} />
+              <Text style={styles.errorStateTitle}>Gagal Memuat Data</Text>
+              <Text style={styles.errorStateText}>{error}</Text>
+              <CustomButton
+                title="Coba Lagi"
+                onPress={() => {
+                  if (route.params?.triggerPrediction) {
+                    handleAnalyzeRisk();
+                  } else {
+                    fetchAssessment(route.params?.assessmentId);
+                  }
+                }}
+                variant="primary"
+                iconName="refresh"
+              />
+            </View>
           ) : (
             <View style={styles.emptyState}>
               <Icon name="assessment" size={64} color={Colors.textMuted} />
@@ -570,8 +605,8 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
             <CustomButton
               title="Lihat Monitoring"
               onPress={() => {
-                navigation.navigate('Main');
-                // User will manually switch to Monitoring tab
+                // Navigate to Main tab navigator and switch to Monitoring tab
+                navigation.navigate('Main', { screen: 'Monitoring' } as any);
               }}
               variant="secondary"
               iconName="show-chart"

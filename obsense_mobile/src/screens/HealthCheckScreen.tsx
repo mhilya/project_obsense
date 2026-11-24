@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+﻿import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   ScrollView,
   StatusBar,
   Pressable,
-  ActivityIndicator,
   TouchableOpacity,
   Alert,
 } from 'react-native';
@@ -55,15 +54,6 @@ export default function HealthCheckScreen({ navigation }: Props) {
   const [merokok, setMerokok] = useState('Tidak');
   const [stres, setStres] = useState('Ringan');
   
-  const bmi = useMemo(() => {
-    const tinggi = Number(tinggiBadan) / 100;
-    const berat = Number(beratBadan);
-    if (tinggi > 0 && berat > 0) {
-      return berat / (tinggi * tinggi);
-    }
-    return 0;
-  }, [tinggiBadan, beratBadan]);
-
   const handleNext = async () => {
     if (step === 3) {
       setCalculating(true);
@@ -111,9 +101,9 @@ export default function HealthCheckScreen({ navigation }: Props) {
           return;
         }
 
-        // Navigate to AssessmentResultScreen
-        // The screen will trigger the prediction automatically
-        navigation.navigate('AssessmentResult', undefined);
+        // Navigate to AssessmentResultScreen with triggerPrediction flag
+        // This will automatically run prediction when the screen loads
+        navigation.navigate('AssessmentResult', { triggerPrediction: true });
       } catch (error) {
         console.error('Error saving cycle data:', error);
         Alert.alert('Error', 'Terjadi kesalahan saat menyimpan data');

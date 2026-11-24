@@ -478,6 +478,30 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.base + 6,
   },
 
+  // ── Error State ───────────────────────────────────────────
+  errorState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.xxxl,
+    paddingHorizontal: Spacing.xl,
+  },
+
+  errorStateTitle: {
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.bold,
+    color: Colors.danger,
+    marginTop: Spacing.base,
+    marginBottom: Spacing.sm,
+  },
+
+  errorStateText: {
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: FontSize.base + 6,
+    marginBottom: Spacing.base,
+  },
+
   // ── Action Buttons ────────────────────────────────────────
   actionButtons: {
     gap: Spacing.sm,

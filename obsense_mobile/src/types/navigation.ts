@@ -8,7 +8,7 @@ export type RootStackParamList = {
   Register: undefined;
   ForgotPassword: undefined;
   Main: undefined;
-  AssessmentResult: { assessmentId?: number } | undefined;
+  AssessmentResult: { assessmentId?: number; triggerPrediction?: boolean } | undefined;
 };
 
 export type BottomTabParamList = {
