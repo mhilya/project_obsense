@@ -19,7 +19,7 @@ export interface UserProfile {
  */
 export interface CompleteUserProfile extends UserProfile {
   phone?: string;
-  gender?: string; // "Laki-laki" | "Perempuan" | "Male" | "Female"
+  gender?: 'Laki-laki' | 'Perempuan' | 'Male' | 'Female'; // Backend accepts both
   birth_date?: string; // "YYYY-MM-DD"
   age?: number;
   height?: number; // cm

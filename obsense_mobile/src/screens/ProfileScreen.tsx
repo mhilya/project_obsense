@@ -157,6 +157,23 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
       return;
     }
 
+    // Validasi tanggal lahir tidak di masa depan dan usia dalam range 1-120 tahun
+    if (editBirthDate) {
+      const birthDate = new Date(editBirthDate);
+      const today = new Date();
+      
+      if (birthDate > today) {
+        showAlert('warning', 'Perhatian', 'Tanggal lahir tidak boleh di masa depan');
+        return;
+      }
+      
+      const age = Math.floor((today.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+      if (age < 1 || age > 120) {
+        showAlert('warning', 'Perhatian', 'Usia harus antara 1-120 tahun');
+        return;
+      }
+    }
+
     try {
       setSaving(true);
       
@@ -225,9 +242,12 @@ function ProfileScreen({ navigation }: Props): React.JSX.Element {
             try {
               // Hapus token dan user data
               await logout();
-              // Navigate ke Login
+              // Navigate ke Login dan reset navigation stack
               // @ts-ignore - navigate to Login (root navigator)
-              navigation.getParent()?.navigate('Login');
+              navigation.getParent()?.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
             } catch (error) {
               console.error('Error during logout:', error);
             }
