@@ -4,7 +4,10 @@ node_modules/
 # Environment variables
 .env
 .env.*
+/.env
+*/.env.
 !.env.example
+!/.env.example
 
 # Logs
 *.log
@@ -15,6 +18,9 @@ npm-debug.log*
 _buildcheck/
 dist/
 build/
+**/build/
+**/dist/
+**/.gradle/
 
 # Python / ML
 __pycache__/
