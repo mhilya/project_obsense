@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import storageService from '../../mock/storageService';
+import api from '../../services/api';
+//import storageService from '../../mock/storageService';
 import useAuth from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
 import {
@@ -28,16 +29,29 @@ export const AdminEvaluations = () => {
   const [adjustedRisk, setAdjustedRisk] = useState('High');
 
   useEffect(() => {
-    const userList = storageService.getUsers();
-    setUsers(userList);
-    if (userList.length > 0) {
-      setSelectedUserId(String(userList[0].id));
-    }
-  }, []);
-
+    const fetchUsers = async () => {
+      try {
+        const response = await api.get('/api/users'); // Asumsikan ada endpoint /api/users
+        setUsers(response.data);
+        if (response.data.length > 0) {
+          setSelectedUserId(String(response.data[0].id));
+        }
+      } catch (err) {
+        console.error("Error fetching users:", err);
+      }
+    };
+    fetchUsers();}, []);
   useEffect(() => {
     if (selectedUserId) {
-      setEvaluations(storageService.getEvaluations(Number(selectedUserId)));
+      const fetchEvaluations = async () => {
+        try {
+          const response = await api.get(`/api/evaluations?user_id=${selectedUserId}`);
+          setEvaluations(response.data);
+        } catch (err) {
+          console.error("Error fetching evaluations:", err);
+        }
+      };
+      fetchEvaluations();
     }
   }, [selectedUserId]);
 
@@ -49,7 +63,7 @@ export const AdminEvaluations = () => {
     u.obesity_class.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddEvaluation = (e) => {
+  const handleAddEvaluation = async (e) => {
     e.preventDefault();
     if (!notes.trim()) {
       showError('Harap tuliskan catatan pengamatan klinis!');
@@ -57,23 +71,21 @@ export const AdminEvaluations = () => {
     }
 
     try {
-      storageService.addEvaluation(
-        {
-          assessment_id: 401,
-          user_id: Number(selectedUserId),
-          userName: selectedUser?.name || 'Pasien',
-          evaluation_notes: notes.trim(),
-          clinical_recommendation: recommendation.trim() || 'Tetap jalankan pola makan seimbang dan monitoring berkala.',
-          adjusted_risk_level: adjustedRisk
-        },
-        currentAdmin?.name || 'Admin Klinis',
-        currentAdmin?.id || 1
-      );
+      const response = await api.post('/api/evaluations', {
+        assessment_id: 401,
+        user_id: Number(selectedUserId),
+        evaluation_notes: notes.trim(),
+        clinical_recommendation: recommendation.trim() || 'Tetap jalankan pola makan seimbang dan monitoring berkala.',
+        adjusted_risk_level: adjustedRisk
+      });
 
       showSuccess('Evaluasi manual klinis berhasil direkam ke database (Append-Only)!');
       setNotes('');
       setRecommendation('');
-      setEvaluations(storageService.getEvaluations(Number(selectedUserId)));
+
+      // Refresh evaluations
+      const evalResponse = await api.get(`/api/evaluations?user_id=${selectedUserId}`);
+      setEvaluations(evalResponse.data);
     } catch (err) {
       showError('Gagal menyimpan evaluasi: ' + err.message);
     }
