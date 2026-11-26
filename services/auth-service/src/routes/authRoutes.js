@@ -8,6 +8,12 @@ router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.post('/admin/login', authController.adminLogin);
 
+// Password Reset (Publik)
+const passwordResetController = require('../controllers/passwordResetController');
+router.post('/forgot-password/request-otp', passwordResetController.requestOTP);
+router.post('/forgot-password/verify-otp', passwordResetController.verifyOTP);
+router.post('/forgot-password/reset-password', passwordResetController.resetPassword);
+
 // Terproteksi
 router.get('/me', authMiddleware, authController.getMe);
 router.put('/profile', authMiddleware, authController.updateProfile);

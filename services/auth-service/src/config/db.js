@@ -68,6 +68,20 @@ async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS \`password_reset_otps\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`email\` VARCHAR(150) NOT NULL,
+        \`account_type\` ENUM('user', 'admin') NOT NULL DEFAULT 'user',
+        \`otp_code\` VARCHAR(6) NOT NULL,
+        \`expires_at\` DATETIME NOT NULL,
+        \`is_used\` BOOLEAN DEFAULT FALSE,
+        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX \`idx_otp_email\` (\`email\`),
+        INDEX \`idx_otp_code\` (\`otp_code\`)
+      ) ENGINE=InnoDB;
+    `);
+
     // Seed super admin awal jika tabel admins masih kosong
     const [rows] = await pool.query('SELECT COUNT(*) AS total FROM admins');
     if (rows[0].total === 0) {

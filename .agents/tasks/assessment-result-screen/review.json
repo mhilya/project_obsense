@@ -1,0 +1,14 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    "Prediction flow broken — HealthCheckScreen navigates to AssessmentResultScreen after form submission expecting auto-prediction, but the screen only fetches existing assessments. Add a route param like `triggerPrediction: true` and call `handleAnalyzeRisk()` in useEffect when that flag is set.",
+    "Navigation to Monitoring doesn't switch tab — \"Lihat Monitoring\" button calls `navigation.navigate('Main')` without tab selection. Use a navigation prop like `navigation.navigate('Main', { screen: 'Monitoring' })` or remove the button if tab switching isn't supported.",
+    "SHAP feature labels are hardcoded — `getFeatureLabel()` maps feature names to Indonesian labels in-app. If the ML model adds or renames features, the mobile app shows raw names. Fetch feature metadata from `/api/predict/metadata` or include translations in the prediction response.",
+    "No retry mechanism after fetch failure — network errors show an alert, but the screen remains in a failed state. Add a \"Coba Lagi\" button in the error state or allow pull-to-refresh to retry.",
+    "Assessment detail response structure unverified — the screen expects `scenario_a_full`, `scenario_b_lifestyle`, `top_shap_factors`, `recommendations`, and `admin_evaluations` in `GET /assessments/:id`. Confirm this matches the backend contract from assessment-service.",
+    "History mapping assumes lifestyle_prediction — `fetchHistory()` maps `item.lifestyle_prediction?.obesity_class` but the backend may store this under a different key. Verify the response structure for `GET /assessments`.",
+    "Admin evaluations section has no backend — the section renders if `admin_evaluations` array is non-empty, but assessment-service doesn't populate this yet. Document that this is Phase 5 infrastructure.",
+    "Error status code checking is brittle — `result.error?.includes('404')` assumes the error string contains the status code. Return `statusCode` as a separate field from `authenticatedRequest` and check `result.statusCode === 404` instead of string matching."
+  ],
+  "reviewDoc": "c:\\project_obsense\\.agents\\tasks\\assessment-result-screen\\review.md"
+}
