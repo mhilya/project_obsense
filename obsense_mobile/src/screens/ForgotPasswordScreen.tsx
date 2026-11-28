@@ -79,10 +79,14 @@ function ForgotPasswordScreen({ navigation }: Props): React.JSX.Element {
           console.log('🔐 OTP:', result.devOtp);
         }
 
+        const otpMessage = result.devOtp
+          ? `Kode OTP telah dibuat untuk ${email} (berlaku 10 menit).\n\nKode OTP (Mode Demo): ${result.devOtp}`
+          : `Kode OTP telah dikirim ke ${email}. Periksa inbox Anda. Berlaku 10 menit.`;
+
         showAlert(
           'success',
           'OTP Terkirim!',
-          `Kode OTP telah dikirim ke ${email}. Periksa inbox Anda. Berlaku 10 menit.`,
+          otpMessage,
           [{ text: 'OK', onPress: () => setStep('otp') }]
         );
       } else {
@@ -454,7 +458,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.backgroundLight,
+    backgroundColor: Colors.background,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 6,
@@ -532,7 +536,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   requirements: {
-    backgroundColor: Colors.backgroundLight,
+    backgroundColor: Colors.background,
     padding: 14,
     borderRadius: 10,
     gap: 10,

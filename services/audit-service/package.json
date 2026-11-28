@@ -1,14 +1,13 @@
 {
-  "name": "obsense-backend",
+  "name": "obsense-audit-service",
   "version": "1.0.0",
-  "description": "Backend API for Obsense using Node.js, Express, and MySQL",
+  "description": "OBSENSE audit-service: pencatatan & pelacakan audit log aktivitas admin (audit_db)",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",

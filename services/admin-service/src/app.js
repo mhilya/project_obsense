@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const mysql = require('mysql2/promise');
 const sequelize = require('./config/database');
 const routes = require('./routes');
 const initialConfigs = require('./seeds/initialConfig');
@@ -11,45 +12,48 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4005;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
 app.use('/api', routes);
 
-// Health check
 app.get('/health', (req, res) => {
-  res.json({ service: 'admin-service', status: 'OK', port: PORT });
+  res.json({ service: 'admin-service', status: 'OK', port: Number(PORT) });
 });
 
-// Auto-init database dan seed
+// Auto-create database admin_db, sync tabel Sequelize, dan seed konfigurasi awal
 const initDatabase = async () => {
   try {
-    // Sync semua model ke database
-    await sequelize.sync({ alter: true }); // Gunakan `force: true` untuk reset (hati-hati!)
+    const dbName = process.env.DB_NAME || 'admin_db';
+    const initConn = await mysql.createConnection({
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
+    });
+    await initConn.query(
+      `CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+    );
+    await initConn.end();
 
-    // Seed data awal untuk system_configurations
+    await sequelize.sync({ alter: true });
+
     for (const config of initialConfigs) {
-      const [existing] = await SystemConfiguration.findOrCreate({
+      await SystemConfiguration.findOrCreate({
         where: { config_key: config.config_key },
-        defaults: config
+        defaults: config,
       });
-      if (!existing) {
-        console.log(`✅ Seed data untuk ${config.config_key} sudah ada.`);
-      }
     }
 
-    console.log('✅ Database admin_db dan seed data berhasil diinisialisasi!');
+    console.log(`✅ admin-service: database "${dbName}" & seed konfigurasi siap.`);
   } catch (err) {
-    console.error('❌ Error inisialisasi database:', err.message);
+    console.error('❌ admin-service: gagal inisialisasi database:', err.message);
   }
 };
 
-// Jalankan inisialisasi
 initDatabase();
 
 app.listen(PORT, () => {
-  console.log(`🚀 Admin Service running on http://localhost:${PORT}`);
+  console.log(`🛠️ admin-service running on http://localhost:${PORT}`);
 });

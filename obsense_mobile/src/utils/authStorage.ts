@@ -520,16 +520,22 @@ export async function getUserProfile(): Promise<CompleteUserProfile | null> {
     }
 
     // Try to get complete profile from user-service
-    const response = await authenticatedRequest<{ user: CompleteUserProfile }>(
+    // user-service returns { success: true, data: CompleteUserProfile }
+    const response = await authenticatedRequest<{
+      success?: boolean;
+      data?: CompleteUserProfile;
+      user?: CompleteUserProfile;
+    }>(
       '/users/me',
       token,
       { method: 'GET' }
     );
 
-    if (response.success && response.data) {
+    const profile = response.data?.data ?? response.data?.user;
+    if (response.success && profile) {
       // Update cache with complete profile
-      await cacheUserProfile(response.data.user);
-      return response.data.user;
+      await cacheUserProfile(profile);
+      return profile;
     }
 
     // If 404 or error, fallback to auth-service (basic profile)
@@ -567,6 +573,7 @@ export async function updateCompleteUserProfile(
     phone: string;
     gender: string; // "Laki-laki" | "Perempuan"
     birth_date: string; // "YYYY-MM-DD"
+    age: number;
     height: number; // cm
     weight: number; // kg
     address: string;
@@ -584,9 +591,12 @@ export async function updateCompleteUserProfile(
       return { success: false, error: 'Token tidak ditemukan. Silakan login kembali.' };
     }
 
-    const response = await authenticatedRequest<{ 
-      message: string; 
-      user: CompleteUserProfile 
+    // user-service returns { success: true, message, data: CompleteUserProfile }
+    const response = await authenticatedRequest<{
+      success?: boolean;
+      message?: string;
+      data?: CompleteUserProfile;
+      user?: CompleteUserProfile;
     }>(
       '/users/me',
       token,
@@ -596,10 +606,11 @@ export async function updateCompleteUserProfile(
       }
     );
 
-    if (response.success && response.data) {
+    const updatedProfile = response.data?.data ?? response.data?.user;
+    if (response.success && updatedProfile) {
       // Update cache with complete profile including BMI calculation
-      await cacheUserProfile(response.data.user);
-      return { success: true, user: response.data.user };
+      await cacheUserProfile(updatedProfile);
+      return { success: true, user: updatedProfile };
     }
 
     return { 

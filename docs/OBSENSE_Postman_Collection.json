@@ -1,0 +1,393 @@
+{
+  "info": {
+    "name": "OBSENSE Microservices API Collection",
+    "description": "Koleksi endpoint lengkap OBSENSE (Polyglot Microservices: Gateway :4000 -> Auth :4001, User :4002, Assessment :4003, Admin :4005, Audit :4006, Prediction ML :5001). Jalankan 'Admin Login' atau 'Mobile User Login' terlebih dahulu agar token tersimpan otomatis.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "adminToken", "value": "" },
+    { "key": "userToken", "value": "" },
+    { "key": "userId", "value": "1" },
+    { "key": "cycleId", "value": "1" },
+    { "key": "logId", "value": "1" },
+    { "key": "assessmentId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "0. Health Checks",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+        },
+        {
+          "name": "Prediction Service Health (Direct :5001)",
+          "request": { "method": "GET", "url": "http://localhost:5001/health" }
+        }
+      ]
+    },
+    {
+      "name": "1. Auth Service (/api/auth)",
+      "item": [
+        {
+          "name": "Admin Login (Auto-save adminToken)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.token) pm.collectionVariables.set('adminToken', j.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@obsense.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/admin/login"
+          }
+        },
+        {
+          "name": "Mobile User Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dimas Prasetyo\",\n  \"email\": \"dimas@obsense.test\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "Mobile User Login (Auto-save userToken & userId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.token) pm.collectionVariables.set('userToken', j.token);",
+                  "if (j.user && j.user.id) pm.collectionVariables.set('userId', String(j.user.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"dimas@obsense.test\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Get Current Session (/me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/auth/me"
+          }
+        },
+        {
+          "name": "List Admins (Super Admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/auth/admins"
+          }
+        },
+        {
+          "name": "Create Admin (Super Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dr. Budi Santoso, S.Gz\",\n  \"email\": \"admin@obsense.com\",\n  \"password\": \"admin123\",\n  \"role\": \"admin\",\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/admins"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. User Service (/api/users)",
+      "item": [
+        {
+          "name": "Mobile - Upsert My Profile (PUT /users/me)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{userToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gender\": \"Laki-laki\",\n  \"birth_date\": \"2001-05-15\",\n  \"height\": 172,\n  \"weight\": 95,\n  \"phone\": \"081234567890\",\n  \"address\": \"Jl. Contoh No. 10\",\n  \"family_history_with_overweight\": true,\n  \"smoke\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/users/me"
+          }
+        },
+        {
+          "name": "Mobile - Get My Profile (GET /users/me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": "{{baseUrl}}/api/users/me"
+          }
+        },
+        {
+          "name": "Admin - List All Users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/users?includeDeleted=false"
+          }
+        },
+        {
+          "name": "Admin - Create Patient",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Siti Aminah\",\n  \"email\": \"siti@obsense.test\",\n  \"gender\": \"Female\",\n  \"age\": 28,\n  \"height\": 160,\n  \"weight\": 62,\n  \"family_history_with_overweight\": false,\n  \"smoke\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/users"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Assessment & Cycle Service (/api/cycles & /api/assessments)",
+      "item": [
+        {
+          "name": "Start 14-Day Cycle (Auto-save cycleId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.id) pm.collectionVariables.set('cycleId', String(j.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{userToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{baseUrl}}/api/cycles"
+          }
+        },
+        {
+          "name": "Get Current Active Cycle",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": "{{baseUrl}}/api/cycles/current"
+          }
+        },
+        {
+          "name": "Submit Daily Log (FFQ + Lifestyle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.log && j.data.log.id) pm.collectionVariables.set('logId', String(j.data.log.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{userToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"faf\": 1,\n  \"tue\": 2,\n  \"fcvc\": 2,\n  \"ncp\": 3,\n  \"favc\": true,\n  \"ch2o\": 1.8,\n  \"caec\": \"Frequently\",\n  \"scc\": false,\n  \"calc\": \"no\",\n  \"mtrans\": \"Public_Transportation\",\n  \"notes\": \"Banyak duduk di kantor\"\n}"
+            },
+            "url": "{{baseUrl}}/api/cycles/daily-logs"
+          }
+        },
+        {
+          "name": "Trigger ML Prediction from Cycle (Inter-Service)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.id) pm.collectionVariables.set('assessmentId', String(j.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{userToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycle_id\": {{cycleId}}\n}"
+            },
+            "url": "{{baseUrl}}/api/assessments/predict"
+          }
+        },
+        {
+          "name": "List Assessments",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/assessments"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Prediction ML Service (/api/predict)",
+      "item": [
+        {
+          "name": "Get Model Metadata (A/B Testing, Feature Importance, Correlation)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/predict/metadata"
+          }
+        },
+        {
+          "name": "Direct Predict — Full (Scenario A + B + SHAP)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gender\": \"Male\",\n  \"age\": 24,\n  \"height\": 172,\n  \"weight\": 115,\n  \"family_history_with_overweight\": true,\n  \"smoke\": false,\n  \"faf\": 0,\n  \"tue\": 2,\n  \"fcvc\": 1,\n  \"ncp\": 3,\n  \"favc\": true,\n  \"ch2o\": 1.2,\n  \"caec\": \"Frequently\",\n  \"scc\": false,\n  \"calc\": \"Sometimes\",\n  \"mtrans\": \"Public_Transportation\"\n}"
+            },
+            "url": "{{baseUrl}}/api/predict"
+          }
+        },
+        {
+          "name": "Direct Predict — Lifestyle-Only (Scenario B without Height/Weight)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gender\": \"Female\",\n  \"age\": 22,\n  \"family_history_with_overweight\": false,\n  \"faf\": 3,\n  \"tue\": 0,\n  \"fcvc\": 3,\n  \"ncp\": 3,\n  \"favc\": false,\n  \"ch2o\": 2.5,\n  \"caec\": \"Sometimes\",\n  \"mtrans\": \"Walking\"\n}"
+            },
+            "url": "{{baseUrl}}/api/predict"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Admin Service (/api/evaluations & /api/configurations)",
+      "item": [
+        {
+          "name": "List Evaluations by User",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/evaluations?user_id={{userId}}"
+          }
+        },
+        {
+          "name": "Create Clinical Evaluation (Append-Only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assessment_id\": {{assessmentId}},\n  \"user_id\": {{userId}},\n  \"evaluation_notes\": \"Pasien menunjukkan kepatuhan baik namun screen time masih tinggi.\",\n  \"clinical_recommendation\": \"Anjurkan jalan kaki 30 menit/hari dan kurangi gorengan.\",\n  \"adjusted_risk_level\": \"High\"\n}"
+            },
+            "url": "{{baseUrl}}/api/evaluations"
+          }
+        },
+        {
+          "name": "Get System Configurations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/configurations"
+          }
+        },
+        {
+          "name": "Update FFQ Window Configuration (Super Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config_value\": {\n    \"window_days\": 14,\n    \"min_days_required\": 10,\n    \"allow_missed_day_recovery\": true\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/configurations/ffq_window"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Audit Service (/api/audit)",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/audit?limit=50"
+          }
+        },
+        {
+          "name": "Record Custom Audit Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"EXPORT_DATA\",\n  \"entity_type\": \"User\",\n  \"entity_id\": \"ALL\",\n  \"details\": { \"format\": \"CSV\" }\n}"
+            },
+            "url": "{{baseUrl}}/api/audit"
+          }
+        }
+      ]
+    }
+  ]
+}

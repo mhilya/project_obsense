@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,11 @@ import { BottomTabParamList, RootStackParamList } from '../types/navigation';
 import { Colors, Spacing } from '../theme';
 import styles from '../styles/HealthCheckScreen.styles';
 import { authenticatedRequest } from '../utils/api';
-import { getToken } from '../utils/authStorage';
+import {
+  getToken,
+  getUserProfile,
+  updateCompleteUserProfile,
+} from '../utils/authStorage';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<BottomTabParamList, 'HealthCheck'>,
@@ -53,7 +57,31 @@ export default function HealthCheckScreen({ navigation }: Props) {
   const [durasiTidur, setDurasiTidur] = useState('');
   const [merokok, setMerokok] = useState('Tidak');
   const [stres, setStres] = useState('Ringan');
-  
+
+  // Pre-fill data fisik dari profil user-service jika sudah pernah diisi
+  useEffect(() => {
+    getUserProfile().then(profile => {
+      if (!profile) return;
+      if (profile.name) setNama(profile.name);
+      if (profile.age) setUsia(String(profile.age));
+      if (profile.gender) {
+        setGender(
+          profile.gender === 'Female' || profile.gender === 'Perempuan'
+            ? 'Perempuan'
+            : 'Laki-laki',
+        );
+      }
+      if (profile.height) setTinggiBadan(String(profile.height));
+      if (profile.weight) setBeratBadan(String(profile.weight));
+      if (profile.family_history_with_overweight !== undefined) {
+        setRiwayatKeluarga(profile.family_history_with_overweight ? 'Ya' : 'Tidak');
+      }
+      if (profile.smoke !== undefined) {
+        setMerokok(profile.smoke ? 'Ya' : 'Tidak');
+      }
+    });
+  }, []);
+
   const handleNext = async () => {
     if (step === 3) {
       setCalculating(true);
@@ -65,47 +93,84 @@ export default function HealthCheckScreen({ navigation }: Props) {
           return;
         }
 
-        // Prepare form data for cycle creation/update
-        const cycleData = {
-          // Form 1: Genetik & Fisik
+        // 1. Simpan/perbarui profil antropometri di user-service (PUT /users/me)
+        const profileRes = await updateCompleteUserProfile({
+          name: nama.trim(),
+          age: Number(usia),
+          gender,
+          height: Number(tinggiBadan),
+          weight: Number(beratBadan),
           family_history_with_overweight: riwayatKeluarga === 'Ya',
-          
-          // Form 2: Pola Konsumsi
-          FCVC: sayurBuah === 'Selalu' ? 3 : sayurBuah === 'Sering' ? 2 : sayurBuah === 'Kadang-kadang' ? 1 : 0,
-          NCP: 3, // Default main meals
-          CAEC: makananCepat === 'Selalu' ? 3 : makananCepat === 'Sering' ? 2 : makananCepat === 'Kadang-kadang' ? 1 : 0,
-          CH2O: minumManis === 'Jarang' ? 2 : 1, // Inverse for water consumption
-          
-          // Form 3: Gaya Hidup
-          FAF: aktivitasFisik === 'Berat' ? 3 : aktivitasFisik === 'Sedang' ? 2 : 1,
-          TUE: Number(durasiTidur) < 7 ? 2 : 1, // Screen time (inverse of sleep)
-          SMOKE: merokok === 'Ya',
-          SCC: false, // Default: not monitoring calories
-          CALC: 'no', // Default: no alcohol
-          MTRANS: 'Public_Transportation', // Default transportation
-        };
+          smoke: merokok === 'Ya',
+        });
 
-        // Save cycle data (you may need to implement this endpoint or update existing one)
-        const cycleResult = await authenticatedRequest(
-          '/cycles',
-          token,
-          {
-            method: 'POST',
-            body: JSON.stringify(cycleData),
-          }
-        );
-
-        if (!cycleResult.success) {
-          Alert.alert('Error', cycleResult.error || 'Gagal menyimpan data siklus');
-          setCalculating(false);
+        if (!profileRes.success) {
+          Alert.alert('Error', profileRes.error || 'Gagal menyimpan data profil fisik');
           return;
         }
 
-        // Navigate to AssessmentResultScreen with triggerPrediction flag
-        // This will automatically run prediction when the screen loads
+        // 2. Pastikan ada siklus pemantauan 14 hari yang aktif (GET /cycles/current -> POST /cycles)
+        const currentCycleRes = await authenticatedRequest<{ success?: boolean; data?: { id: number } | null }>(
+          '/cycles/current',
+          token,
+          { method: 'GET' }
+        );
+
+        let activeCycleId = currentCycleRes.data?.data?.id;
+        if (!activeCycleId) {
+          const createCycleRes = await authenticatedRequest<{ success?: boolean; data?: { id: number } }>(
+            '/cycles',
+            token,
+            { method: 'POST', body: JSON.stringify({}) }
+          );
+          if (!createCycleRes.success && createCycleRes.statusCode !== 409) {
+            Alert.alert('Error', createCycleRes.error || 'Gagal memulai siklus pemantauan');
+            return;
+          }
+          activeCycleId = createCycleRes.data?.data?.id;
+        }
+
+        // 3. Simpan log harian FFQ & gaya hidup ke assessment-service (POST /cycles/daily-logs)
+        const mapCaec = (freq: string): 'no' | 'Sometimes' | 'Frequently' | 'Always' => {
+          if (freq === 'Selalu') return 'Always';
+          if (freq === 'Sering') return 'Frequently';
+          if (freq === 'Kadang-kadang') return 'Sometimes';
+          return 'no';
+        };
+
+        const dailyLogPayload = {
+          ...(activeCycleId ? { cycle_id: activeCycleId } : {}),
+          faf: aktivitasFisik === 'Berat' ? 3 : aktivitasFisik === 'Sedang' ? 2 : 1,
+          tue: Number(durasiTidur) < 6 ? 2 : Number(durasiTidur) < 8 ? 1 : 0,
+          fcvc: sayurBuah === 'Selalu' ? 3 : sayurBuah === 'Sering' || sayurBuah === 'Kadang-kadang' ? 2 : 1,
+          ncp: 3,
+          favc: makananCepat === 'Sering' || makananCepat === 'Selalu',
+          ch2o: minumManis === 'Jarang' ? 2.5 : minumManis === 'Kadang-kadang' ? 2.0 : 1.5,
+          caec: mapCaec(makanMalam),
+          scc: false,
+          calc: 'no',
+          mtrans: 'Public_Transportation',
+          notes: `Tidur ${durasiTidur} jam/hari, stres ${stres}`,
+        };
+
+        const logResult = await authenticatedRequest(
+          '/cycles/daily-logs',
+          token,
+          {
+            method: 'POST',
+            body: JSON.stringify(dailyLogPayload),
+          }
+        );
+
+        if (!logResult.success) {
+          Alert.alert('Error', logResult.error || 'Gagal menyimpan log harian');
+          return;
+        }
+
+        // 4. Arahkan ke AssessmentResultScreen untuk otomatis memicu prediksi ML
         navigation.navigate('AssessmentResult', { triggerPrediction: true });
       } catch (error) {
-        console.error('Error saving cycle data:', error);
+        console.error('Error saving health check:', error);
         Alert.alert('Error', 'Terjadi kesalahan saat menyimpan data');
       } finally {
         setCalculating(false);

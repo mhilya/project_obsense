@@ -6,9 +6,10 @@ $services = @(
   @{ name = 'auth-service';       dir = "$root\services\auth-service";       type = 'node' },
   @{ name = 'user-service';       dir = "$root\services\user-service";       type = 'node' },
   @{ name = 'assessment-service'; dir = "$root\services\assessment-service"; type = 'node' },
+  @{ name = 'admin-service';      dir = "$root\services\admin-service";      type = 'node' },
+  @{ name = 'audit-service';      dir = "$root\services\audit-service";      type = 'node' },
   @{ name = 'prediction-service'; dir = "$root\obsense_ml";                  type = 'python' },
   @{ name = 'gateway';            dir = "$root\services\gateway";            type = 'node' }
-  # Tambahkan service lain di sini setelah dibuat
 )
 
 foreach ($s in $services) {

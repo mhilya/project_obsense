@@ -29,12 +29,12 @@ export async function apiRequest<T>(
       },
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
       return {
         success: false,
-        error: data.message || `HTTP error! status: ${response.status}`,
+        error: data.message || data.error || `HTTP error! status: ${response.status}`,
         statusCode: response.status,
       };
     }

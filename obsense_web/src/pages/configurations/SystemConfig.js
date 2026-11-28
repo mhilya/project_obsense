@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import storageService from '../../mock/storageService';
-import useAuth from '../../hooks/useAuth';
+import React, { useState, useEffect, useCallback } from 'react';
+import configService from '../../services/configService';
+import { apiErrorMessage } from '../../services/userService';
+import { INITIAL_CONFIGURATIONS } from '../../mock/mockData';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Save,
@@ -12,19 +13,24 @@ import {
 } from 'lucide-react';
 
 export const SystemConfig = () => {
-  const { user: currentAdmin } = useAuth();
   const { showSuccess, showError, confirm } = useNotification();
 
-  const [config, setConfig] = useState(() => storageService.getConfigurations());
+  const [config, setConfig] = useState(INITIAL_CONFIGURATIONS);
   const [activeTab, setActiveTab] = useState('thresholds');
 
-  const loadConfig = () => {
-    setConfig(storageService.getConfigurations());
-  };
+  const loadConfig = useCallback(async () => {
+    try {
+      const data = await configService.getConfigurations();
+      setConfig(data);
+    } catch (err) {
+      showError('Gagal memuat konfigurasi: ' + apiErrorMessage(err));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     loadConfig();
-  }, []);
+  }, [loadConfig]);
 
   const handleSaveConfig = async (e) => {
     e.preventDefault();
@@ -36,14 +42,11 @@ export const SystemConfig = () => {
 
     if (ok) {
       try {
-        const updated = storageService.updateConfigurations(
-          config,
-          currentAdmin?.name || 'Administrator'
-        );
+        const updated = await configService.updateConfigurations(config);
         setConfig(updated);
         showSuccess('Konfigurasi sistem berhasil disimpan dan diterapkan!');
       } catch (err) {
-        showError('Gagal menyimpan konfigurasi: ' + err.message);
+        showError('Gagal menyimpan konfigurasi: ' + apiErrorMessage(err));
       }
     }
   };
@@ -57,9 +60,13 @@ export const SystemConfig = () => {
     });
 
     if (ok) {
-      localStorage.removeItem('obsense_configurations');
-      loadConfig();
-      showSuccess('Konfigurasi berhasil dikembalikan ke standar awal.');
+      try {
+        const reset = await configService.resetDefaults();
+        setConfig(reset);
+        showSuccess('Konfigurasi berhasil dikembalikan ke standar awal.');
+      } catch (err) {
+        showError('Gagal reset konfigurasi: ' + apiErrorMessage(err));
+      }
     }
   };
 

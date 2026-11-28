@@ -24,13 +24,14 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AssessmentResult'>;
 // Type definitions for API responses
 interface ShapFactor {
   feature: string;
+  label?: string;
   value: string | number;
   impact: number;
   description: string;
 }
 
 interface ScenarioResult {
-  prediction: number;
+  prediction?: number;
   probability: number;
   obesity_class: string;
   risk_level: 'Low' | 'Moderate' | 'High' | 'Critical';
@@ -51,9 +52,12 @@ interface Assessment {
 }
 
 interface AdminEvaluation {
+  id?: number;
   evaluator_name: string;
   evaluation_date: string;
   notes: string;
+  clinical_recommendation?: string;
+  adjusted_risk_level?: string;
   role: string;
 }
 
@@ -65,11 +69,155 @@ interface AssessmentHistory {
   risk_level: string;
 }
 
+const VALID_RISKS = ['Low', 'Moderate', 'High', 'Critical'] as const;
+type RiskLevel = (typeof VALID_RISKS)[number];
+
+const normalizeRiskLevel = (risk?: string): RiskLevel => {
+  if (risk && (VALID_RISKS as readonly string[]).includes(risk)) {
+    return risk as RiskLevel;
+  }
+  return 'Low';
+};
+
+const getMaxProbability = (scores?: Record<string, number> | null, fallback?: number): number => {
+  if (typeof fallback === 'number' && !Number.isNaN(fallback)) {
+    return fallback;
+  }
+  if (scores && typeof scores === 'object') {
+    const values = Object.values(scores).filter((v) => typeof v === 'number');
+    if (values.length > 0) {
+      return Math.max(...values);
+    }
+  }
+  return 0;
+};
+
+const normalizeShapFactors = (rawFactors: any): ShapFactor[] => {
+  if (!Array.isArray(rawFactors)) return [];
+  return rawFactors.map((item: any) => {
+    const rawShap =
+      typeof item?.shap_value === 'number'
+        ? item.shap_value
+        : typeof item?.impact === 'number'
+        ? item.impact
+        : 0;
+    const isRiskUp =
+      typeof item?.impact === 'string' ? item.impact === 'risk_up' : rawShap >= 0;
+    const numericImpact = isRiskUp ? Math.abs(rawShap) : -Math.abs(rawShap);
+    const formattedValue =
+      item?.value !== undefined && item?.value !== null
+        ? item.value
+        : `${rawShap >= 0 ? '+' : ''}${rawShap.toFixed(3)}`;
+    const directionText = isRiskUp
+      ? 'Meningkatkan risiko obesitas'
+      : 'Faktor pelindung terhadap risiko obesitas';
+    const description =
+      item?.description ||
+      (item?.category ? `${item.category} • ${directionText}` : directionText);
+
+    return {
+      feature: String(item?.feature || ''),
+      label: item?.label ? String(item.label) : undefined,
+      value: formattedValue,
+      impact: numericImpact,
+      description,
+    };
+  });
+};
+
+const normalizeAssessmentResponse = (rawPayload: any): Assessment | null => {
+  if (!rawPayload || typeof rawPayload !== 'object') return null;
+
+  // Handle both POST /assessments/predict ({ data, prediction }) and GET /assessments/:id ({ data })
+  const saved = rawPayload.data && typeof rawPayload.data === 'object' ? rawPayload.data : rawPayload;
+  const pred = rawPayload.prediction && typeof rawPayload.prediction === 'object' ? rawPayload.prediction : null;
+
+  if (!saved || typeof saved !== 'object' || saved.id === undefined) {
+    return null;
+  }
+
+  const rawBmi = saved.bmi ?? pred?.bmi;
+  const bmi =
+    rawBmi !== null && rawBmi !== undefined && !Number.isNaN(Number(rawBmi))
+      ? Number(rawBmi)
+      : undefined;
+
+  let scenarioA: ScenarioResult | undefined;
+  if (pred?.scenario_a_full) {
+    if (pred.scenario_a_full.available) {
+      scenarioA = {
+        obesity_class: pred.scenario_a_full.obesity_class || 'N/A',
+        risk_level: normalizeRiskLevel(pred.scenario_a_full.risk_level),
+        probability: getMaxProbability(
+          pred.scenario_a_full.probability_scores,
+          pred.scenario_a_full.probability
+        ),
+      };
+    }
+  } else if (saved.scenario_a_full && saved.scenario_a_full.available !== false) {
+    scenarioA = {
+      obesity_class: saved.scenario_a_full.obesity_class || 'N/A',
+      risk_level: normalizeRiskLevel(saved.scenario_a_full.risk_level),
+      probability: getMaxProbability(
+        saved.scenario_a_full.probability_scores,
+        saved.scenario_a_full.probability
+      ),
+    };
+  } else if (bmi !== undefined && saved.obesity_class) {
+    scenarioA = {
+      obesity_class: saved.obesity_class,
+      risk_level: normalizeRiskLevel(saved.risk_level),
+      probability: getMaxProbability(saved.probability_scores),
+    };
+  }
+
+  const rawScenarioB =
+    pred?.scenario_b_lifestyle ??
+    saved.lifestyle_prediction ??
+    saved.scenario_b_lifestyle ??
+    {
+      obesity_class: saved.obesity_class || 'N/A',
+      risk_level: saved.risk_level,
+      probability_scores: saved.probability_scores,
+    };
+
+  const scenarioB: ScenarioResult = {
+    obesity_class: rawScenarioB?.obesity_class || saved.obesity_class || 'N/A',
+    risk_level: normalizeRiskLevel(rawScenarioB?.risk_level || saved.risk_level),
+    probability: getMaxProbability(
+      rawScenarioB?.probability_scores ?? saved.probability_scores,
+      rawScenarioB?.probability
+    ),
+  };
+
+  const rawShap = pred?.top_shap_factors ?? saved.shap_factors ?? saved.top_shap_factors ?? [];
+  const rawRecs = pred?.recommendations ?? saved.recommendations ?? [];
+
+  return {
+    id: Number(saved.id),
+    user_id: Number(saved.user_id || 0),
+    cycle_id: saved.cycle_id !== undefined && saved.cycle_id !== null ? Number(saved.cycle_id) : undefined,
+    assessment_date: saved.assessment_date || saved.created_at || new Date().toISOString(),
+    bmi,
+    scenario_a_full: scenarioA,
+    scenario_b_lifestyle: scenarioB,
+    top_shap_factors: normalizeShapFactors(rawShap),
+    recommendations: Array.isArray(rawRecs) ? rawRecs : [],
+    admin_evaluations: Array.isArray(saved.admin_evaluations) ? saved.admin_evaluations : undefined,
+  };
+};
+
+const formatObesityClass = (cls?: string): string => {
+  if (!cls) return 'N/A';
+  return cls.replace(/_/g, ' ');
+};
+
 export default function AssessmentResultScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [history, setHistory] = useState<AssessmentHistory[]>([]);
+  const [evaluations, setEvaluations] = useState<AdminEvaluation[]>([]);
   const [hasHeightWeight, setHasHeightWeight] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,34 +236,47 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
       let result;
       if (assessmentId) {
         // Fetch specific assessment
-        result = await authenticatedRequest<Assessment>(
+        result = await authenticatedRequest<any>(
           `/assessments/${assessmentId}`,
           token
         );
       } else {
         // Fetch latest assessment (get first from history)
-        const historyResult = await authenticatedRequest<AssessmentHistory[]>(
+        const historyResult = await authenticatedRequest<any>(
           '/assessments',
           token
         );
-        
-        if (historyResult.success && historyResult.data && historyResult.data.length > 0) {
-          const latestId = historyResult.data[0].id;
-          result = await authenticatedRequest<Assessment>(
+
+        const rawList = Array.isArray(historyResult.data)
+          ? historyResult.data
+          : historyResult.data?.data;
+
+        if (historyResult.success && Array.isArray(rawList) && rawList.length > 0) {
+          const latestId = rawList[0].id;
+          result = await authenticatedRequest<any>(
             `/assessments/${latestId}`,
             token
           );
+        } else if (!historyResult.success) {
+          setError(historyResult.error || 'Gagal memuat data asesmen');
+          return;
         } else {
           // No assessments yet - this is not an error, just empty state
           setAssessment(null);
+          setHasHeightWeight(false);
           return;
         }
       }
 
       if (result.success && result.data) {
-        setAssessment(result.data);
-        setHasHeightWeight(!!result.data.bmi && !!result.data.scenario_a_full);
-        setError(null);
+        const normalized = normalizeAssessmentResponse(result.data);
+        if (normalized) {
+          setAssessment(normalized);
+          setHasHeightWeight(normalized.bmi !== undefined && !!normalized.scenario_a_full);
+          setError(null);
+        } else {
+          setError('Format data asesmen tidak valid');
+        }
       } else {
         setError(result.error || 'Gagal memuat data asesmen');
       }
@@ -133,16 +294,23 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
       const token = await getToken();
       if (!token) return;
 
-      const result = await authenticatedRequest<any[]>('/assessments', token);
-      
-      if (result.success && result.data) {
-        const historyData: AssessmentHistory[] = result.data.map((item: any) => ({
-          id: item.id,
-          assessment_date: item.assessment_date,
-          bmi: item.bmi,
-          // Backend may return lifestyle_prediction as nested object or flat fields
-          obesity_class: item.lifestyle_prediction?.obesity_class || item.obesity_class || 'N/A',
-          risk_level: item.lifestyle_prediction?.risk_level || item.risk_level || 'N/A',
+      const result = await authenticatedRequest<any>('/assessments', token);
+      const rawList = Array.isArray(result.data)
+        ? result.data
+        : result.data?.data;
+
+      if (result.success && Array.isArray(rawList)) {
+        const historyData: AssessmentHistory[] = rawList.map((item: any) => ({
+          id: Number(item.id),
+          assessment_date: item.assessment_date || item.created_at,
+          bmi:
+            item.bmi !== null && item.bmi !== undefined && !Number.isNaN(Number(item.bmi))
+              ? Number(item.bmi)
+              : undefined,
+          obesity_class:
+            item.obesity_class || item.lifestyle_prediction?.obesity_class || 'N/A',
+          risk_level:
+            item.risk_level || item.lifestyle_prediction?.risk_level || 'Low',
         }));
         setHistory(historyData);
       }
@@ -163,28 +331,33 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
         return;
       }
 
-      const result = await authenticatedRequest<Assessment>(
+      const result = await authenticatedRequest<any>(
         '/assessments/predict',
         token,
         { method: 'POST' }
       );
 
       if (result.success && result.data) {
-        setAssessment(result.data);
-        setHasHeightWeight(!!result.data.bmi && !!result.data.scenario_a_full);
-        setError(null);
-        fetchHistory(); // Refresh history
-        Alert.alert('Sukses', 'Analisis risiko obesitas berhasil dilakukan!');
+        const normalized = normalizeAssessmentResponse(result.data);
+        if (normalized) {
+          setAssessment(normalized);
+          setHasHeightWeight(normalized.bmi !== undefined && !!normalized.scenario_a_full);
+          setError(null);
+          fetchHistory(); // Refresh history
+          Alert.alert('Sukses', 'Analisis risiko obesitas berhasil dilakukan!');
+        } else {
+          setError('Format respons prediksi tidak valid');
+        }
       } else {
         if (result.statusCode === 404) {
           Alert.alert(
-            'Profil Belum Lengkap',
-            'Silakan lengkapi profil Anda terlebih dahulu di menu Profil.'
+            'Data Belum Lengkap',
+            result.error || 'Siklus pemantauan atau profil belum ditemukan. Lengkapi Health Check terlebih dahulu.'
           );
         } else if (result.statusCode === 409) {
           Alert.alert(
             'Data Tidak Cukup',
-            'Belum ada siklus aktif atau data kebiasaan hidup belum lengkap. Lengkapi di Health Check terlebih dahulu.'
+            result.error || 'Belum ada siklus aktif atau data kebiasaan hidup belum lengkap. Lengkapi di Health Check terlebih dahulu.'
           );
         } else {
           setError(result.error || 'Gagal melakukan analisis');
@@ -198,14 +371,43 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
     }
   }, [navigation, fetchHistory]);
 
+  // Fetch admin evaluations from admin-service
+  const fetchEvaluations = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const result = await authenticatedRequest<any>('/evaluations', token);
+      const rawList = Array.isArray(result.data)
+        ? result.data
+        : result.data?.data;
+
+      if (result.success && Array.isArray(rawList)) {
+        const mapped: AdminEvaluation[] = rawList.map((item: any) => ({
+          id: item.id,
+          evaluator_name: item.admin_name || item.evaluator_name || 'Tenaga Kesehatan',
+          evaluation_date: item.created_at || item.evaluation_date || new Date().toISOString(),
+          notes: item.evaluation_notes || item.notes || '',
+          clinical_recommendation: item.clinical_recommendation || undefined,
+          adjusted_risk_level: item.adjusted_risk_level || undefined,
+          role: item.role || 'Admin Klinis',
+        }));
+        setEvaluations(mapped);
+      }
+    } catch (err) {
+      console.error('Error fetching evaluations:', err);
+    }
+  }, []);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
       fetchAssessment(route.params?.assessmentId),
       fetchHistory(),
+      fetchEvaluations(),
     ]);
     setRefreshing(false);
-  }, [fetchAssessment, fetchHistory, route.params?.assessmentId]);
+  }, [fetchAssessment, fetchHistory, fetchEvaluations, route.params?.assessmentId]);
 
   useEffect(() => {
     // If triggerPrediction flag is set, run prediction immediately
@@ -215,6 +417,7 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
       fetchAssessment(route.params?.assessmentId);
     }
     fetchHistory();
+    fetchEvaluations();
     // Dependencies are managed via callbacks to avoid infinite loops
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.assessmentId, route.params?.triggerPrediction]);
@@ -248,10 +451,12 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
     }
   };
 
-  const getFeatureLabel = (feature: string) => {
-    // Note: These labels are hardcoded. If ML model features change,
-    // consider fetching from backend API or including translations in prediction response
+  const getFeatureLabel = (feature: string, backendLabel?: string) => {
+    if (backendLabel) return backendLabel;
     const labels: { [key: string]: string } = {
+      'Age': 'Usia',
+      'Gender': 'Jenis Kelamin',
+      'FAVC': 'Makanan Tinggi Kalori',
       'FCVC': 'Konsumsi Sayur',
       'NCP': 'Jumlah Makan Utama',
       'CH2O': 'Konsumsi Air',
@@ -325,7 +530,7 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
           </View>
 
           {/* Info Banner if no height/weight */}
-          {!hasHeightWeight && (
+          {assessment && !hasHeightWeight && (
             <View style={styles.infoBanner}>
               <Icon name="info" size={24} color={Colors.info} />
               <Text style={styles.infoBannerText}>
@@ -355,7 +560,7 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
                       <View style={styles.resultItem}>
                         <Text style={styles.resultLabel}>Kelas Obesitas</Text>
                         <Text style={styles.resultValue}>
-                          {assessment.scenario_a_full.obesity_class}
+                          {formatObesityClass(assessment.scenario_a_full.obesity_class)}
                         </Text>
                       </View>
                       <View style={styles.resultItem}>
@@ -399,7 +604,7 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
                     <View style={styles.resultItem}>
                       <Text style={styles.resultLabel}>Prediksi Kelas</Text>
                       <Text style={styles.resultValue}>
-                        {assessment.scenario_b_lifestyle.obesity_class}
+                        {formatObesityClass(assessment.scenario_b_lifestyle.obesity_class)}
                       </Text>
                     </View>
                     <View style={styles.resultItem}>
@@ -442,45 +647,56 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
               </View>
 
               {/* SHAP Factors Visualization */}
-              <View style={styles.shapCard}>
-                <Text style={styles.shapTitle}>Faktor Pendorong (Explainable AI)</Text>
-                <Text style={styles.shapSubtitle}>
-                  Top {assessment.top_shap_factors.length} faktor yang memengaruhi hasil
-                  prediksi Anda
-                </Text>
-                <View style={styles.shapList}>
-                  {assessment.top_shap_factors.map((factor, index) => (
-                    <View key={index} style={styles.shapItem}>
-                      <View style={styles.shapHeader}>
-                        <View style={styles.shapLabelRow}>
-                          <Icon
-                            name={factor.impact > 0 ? 'arrow-upward' : 'arrow-downward'}
-                            size={20}
-                            color={factor.impact > 0 ? Colors.danger : Colors.success}
-                          />
-                          <Text style={styles.shapFeature}>
-                            {getFeatureLabel(factor.feature)}
-                          </Text>
+              {assessment.top_shap_factors.length > 0 && (() => {
+                const maxAbsImpact = Math.max(
+                  ...assessment.top_shap_factors.map((f) => Math.abs(f.impact)),
+                  0.001
+                );
+                return (
+                  <View style={styles.shapCard}>
+                    <Text style={styles.shapTitle}>Faktor Pendorong (Explainable AI)</Text>
+                    <Text style={styles.shapSubtitle}>
+                      Top {assessment.top_shap_factors.length} faktor yang memengaruhi hasil
+                      prediksi Anda
+                    </Text>
+                    <View style={styles.shapList}>
+                      {assessment.top_shap_factors.map((factor, index) => (
+                        <View key={index} style={styles.shapItem}>
+                          <View style={styles.shapHeader}>
+                            <View style={styles.shapLabelRow}>
+                              <Icon
+                                name={factor.impact > 0 ? 'arrow-upward' : 'arrow-downward'}
+                                size={20}
+                                color={factor.impact > 0 ? Colors.danger : Colors.success}
+                              />
+                              <Text style={styles.shapFeature}>
+                                {getFeatureLabel(factor.feature, factor.label)}
+                              </Text>
+                            </View>
+                            <Text style={styles.shapValue}>{factor.value}</Text>
+                          </View>
+                          <View style={styles.shapBarContainer}>
+                            <View
+                              style={[
+                                styles.shapBar,
+                                {
+                                  width: `${Math.max(
+                                    Math.min((Math.abs(factor.impact) / maxAbsImpact) * 100, 100),
+                                    10
+                                  )}%`,
+                                  backgroundColor:
+                                    factor.impact > 0 ? Colors.danger : Colors.success,
+                                },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.shapDescription}>{factor.description}</Text>
                         </View>
-                        <Text style={styles.shapValue}>{factor.value}</Text>
-                      </View>
-                      <View style={styles.shapBarContainer}>
-                        <View
-                          style={[
-                            styles.shapBar,
-                            {
-                              width: `${Math.min(Math.abs(factor.impact) * 100, 100)}%`,
-                              backgroundColor:
-                                factor.impact > 0 ? Colors.danger : Colors.success,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text style={styles.shapDescription}>{factor.description}</Text>
+                      ))}
                     </View>
-                  ))}
-                </View>
-              </View>
+                  </View>
+                );
+              })()}
 
               {/* Recommendations */}
               {assessment.recommendations.length > 0 && (
@@ -492,30 +708,6 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
                         <Icon name="check-circle" size={20} color={Colors.primary} />
                       </View>
                       <Text style={styles.recommendText}>{rec}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Admin Evaluations (Phase 5) */}
-              {assessment.admin_evaluations && assessment.admin_evaluations.length > 0 && (
-                <View style={styles.evaluationCard}>
-                  <Text style={styles.evaluationTitle}>Evaluasi Tenaga Kesehatan</Text>
-                  {assessment.admin_evaluations.map((evaluation, idx) => (
-                    <View key={idx} style={styles.evaluationItem}>
-                      <View style={styles.evaluationHeader}>
-                        <Icon name="verified-user" size={24} color={Colors.info} />
-                        <View style={styles.evaluationInfo}>
-                          <Text style={styles.evaluatorName}>
-                            {evaluation.evaluator_name}
-                          </Text>
-                          <Text style={styles.evaluatorRole}>{evaluation.role}</Text>
-                        </View>
-                        <Text style={styles.evaluationDate}>
-                          {formatDate(evaluation.evaluation_date)}
-                        </Text>
-                      </View>
-                      <Text style={styles.evaluationNotes}>{evaluation.notes}</Text>
                     </View>
                   ))}
                 </View>
@@ -550,6 +742,67 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
             </View>
           )}
 
+          {/* Admin Evaluations (from admin-service) */}
+          {(() => {
+            const evalList =
+              evaluations.length > 0
+                ? evaluations
+                : assessment?.admin_evaluations || [];
+            if (evalList.length === 0) return null;
+            return (
+              <View style={styles.evaluationCard}>
+                <Text style={styles.evaluationTitle}>Evaluasi Tenaga Kesehatan</Text>
+                {evalList.map((evaluation, idx) => (
+                  <View key={evaluation.id ?? idx} style={styles.evaluationItem}>
+                    <View style={styles.evaluationHeader}>
+                      <Icon name="verified-user" size={24} color={Colors.info} />
+                      <View style={styles.evaluationInfo}>
+                        <Text style={styles.evaluatorName}>
+                          {evaluation.evaluator_name}
+                        </Text>
+                        <Text style={styles.evaluatorRole}>{evaluation.role}</Text>
+                      </View>
+                      <Text style={styles.evaluationDate}>
+                        {formatDate(evaluation.evaluation_date)}
+                      </Text>
+                    </View>
+                    {evaluation.adjusted_risk_level && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                        <Text style={[styles.resultLabel, { marginRight: 8 }]}>
+                          Penyesuaian Risiko Klinis:
+                        </Text>
+                        <View
+                          style={[
+                            styles.riskBadge,
+                            {
+                              backgroundColor:
+                                getRiskColor(evaluation.adjusted_risk_level) + '20',
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.riskBadgeText,
+                              { color: getRiskColor(evaluation.adjusted_risk_level) },
+                            ]}
+                          >
+                            {getRiskLabel(evaluation.adjusted_risk_level)}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                    <Text style={styles.evaluationNotes}>{evaluation.notes}</Text>
+                    {evaluation.clinical_recommendation ? (
+                      <Text style={[styles.evaluationNotes, { marginTop: 6, fontWeight: '600' }]}>
+                        Rekomendasi Klinis: {evaluation.clinical_recommendation}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
+
           {/* Assessment History */}
           {history.length > 0 && (
             <View style={styles.historyCard}>
@@ -567,8 +820,8 @@ export default function AssessmentResultScreen({ navigation, route }: Props) {
                     <View style={styles.historyInfo}>
                       <Text style={styles.historyDate}>{formatDate(item.assessment_date)}</Text>
                       <Text style={styles.historyDetail}>
-                        {item.bmi ? `BMI: ${item.bmi.toFixed(1)} | ` : ''}
-                        {item.obesity_class}
+                        {item.bmi !== undefined ? `BMI: ${item.bmi.toFixed(1)} | ` : ''}
+                        {formatObesityClass(item.obesity_class)}
                       </Text>
                     </View>
                   </View>

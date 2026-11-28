@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   requirementsBox: {
-    backgroundColor: Colors.backgroundLight,
+    backgroundColor: Colors.background,
     padding: 12,
     borderRadius: 8,
     marginTop: 8,
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cancelButton: {
-    backgroundColor: Colors.backgroundLight,
+    backgroundColor: Colors.background,
   },
   cancelButtonText: {
     fontSize: 14,

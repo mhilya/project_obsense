@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../services/api';
-//import storageService from '../../mock/storageService';
+import userService, { apiErrorMessage } from '../../services/userService';
+import evaluationService from '../../services/evaluationService';
 import useAuth from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
 import {
@@ -29,30 +29,28 @@ export const AdminEvaluations = () => {
   const [adjustedRisk, setAdjustedRisk] = useState('High');
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await api.get('/api/users'); // Asumsikan ada endpoint /api/users
-        setUsers(response.data);
-        if (response.data.length > 0) {
-          setSelectedUserId(String(response.data[0].id));
+    userService
+      .getUsersWithLatest()
+      .then((list) => {
+        setUsers(list);
+        if (list.length > 0) {
+          setSelectedUserId(String(list[0].id));
         }
-      } catch (err) {
-        console.error("Error fetching users:", err);
-      }
-    };
-    fetchUsers();}, []);
+      })
+      .catch((err) => showError('Gagal memuat daftar pasien: ' + apiErrorMessage(err)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
-    if (selectedUserId) {
-      const fetchEvaluations = async () => {
-        try {
-          const response = await api.get(`/api/evaluations?user_id=${selectedUserId}`);
-          setEvaluations(response.data);
-        } catch (err) {
-          console.error("Error fetching evaluations:", err);
-        }
-      };
-      fetchEvaluations();
+    if (!selectedUserId) {
+      setEvaluations([]);
+      return;
     }
+    evaluationService
+      .getEvaluations({ user_id: selectedUserId })
+      .then(setEvaluations)
+      .catch((err) => showError('Gagal memuat riwayat evaluasi: ' + apiErrorMessage(err)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUserId]);
 
   const selectedUser = users.find((u) => u.id === Number(selectedUserId));
@@ -65,14 +63,18 @@ export const AdminEvaluations = () => {
 
   const handleAddEvaluation = async (e) => {
     e.preventDefault();
+    if (!selectedUserId) {
+      showError('Pilih pasien terlebih dahulu!');
+      return;
+    }
     if (!notes.trim()) {
       showError('Harap tuliskan catatan pengamatan klinis!');
       return;
     }
 
     try {
-      const response = await api.post('/api/evaluations', {
-        assessment_id: 401,
+      await evaluationService.createEvaluation({
+        assessment_id: selectedUser?.latest_assessment_id || 0,
         user_id: Number(selectedUserId),
         evaluation_notes: notes.trim(),
         clinical_recommendation: recommendation.trim() || 'Tetap jalankan pola makan seimbang dan monitoring berkala.',
@@ -83,11 +85,10 @@ export const AdminEvaluations = () => {
       setNotes('');
       setRecommendation('');
 
-      // Refresh evaluations
-      const evalResponse = await api.get(`/api/evaluations?user_id=${selectedUserId}`);
-      setEvaluations(evalResponse.data);
+      const refreshed = await evaluationService.getEvaluations({ user_id: selectedUserId });
+      setEvaluations(refreshed);
     } catch (err) {
-      showError('Gagal menyimpan evaluasi: ' + err.message);
+      showError('Gagal menyimpan evaluasi: ' + apiErrorMessage(err));
     }
   };
 
@@ -341,7 +342,7 @@ export const AdminEvaluations = () => {
                           </div>
                           <div>
                             <strong className="text-xs font-bold text-slate-900 dark:text-white block">
-                              {item.adminName}
+                              {item.admin_name || item.adminName || 'Admin Klinis'}
                             </strong>
                             <span className="text-[10px] text-slate-400 dark:text-slate-500">
                               Tenaga Medis Terverifikasi

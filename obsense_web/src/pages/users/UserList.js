@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '../../components/common/DataTable';
 import UserDetailModal from './UserDetailModal';
 import UserEditModal from './UserEditModal';
-import storageService from '../../mock/storageService';
+import exportToCSV from '../../utils/exportCsv';
 import userService, { apiErrorMessage } from '../../services/userService';
 import { OBESITY_CLASSES } from '../../mock/mockData';
 import { useNotification } from '../../context/NotificationContext';
@@ -105,7 +105,7 @@ export const UserList = () => {
   };
 
   const handleExportUsers = () => {
-    storageService.exportToCSV(users, `obsense_users_${Date.now()}.csv`);
+    exportToCSV(users, `obsense_users_${Date.now()}.csv`);
     showSuccess('Data pengguna berhasil diexport ke CSV!');
   };
 

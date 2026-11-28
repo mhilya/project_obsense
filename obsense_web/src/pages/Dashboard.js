@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
-import storageService from '../mock/storageService';
+import auditService from '../services/auditService';
 import dashboardService, { EMPTY_STATS } from '../services/dashboardService';
 import DonutChart from '../components/charts/DonutChart';
 import TrendLineChart from '../components/charts/TrendLineChart';
@@ -23,13 +23,18 @@ import {
 export const Dashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState(EMPTY_STATS);
-  const recentLogs = storageService.getAuditLogs().slice(0, 4);
+  const [recentLogs, setRecentLogs] = useState([]);
 
   useEffect(() => {
     dashboardService
       .getStats()
       .then(setStats)
       .catch((err) => console.error('Gagal memuat statistik dashboard:', err));
+
+    auditService
+      .getAuditLogs({ limit: 4 })
+      .then(setRecentLogs)
+      .catch((err) => console.warn('Audit log belum tersedia:', err.message));
   }, []);
 
   // Time-based greeting

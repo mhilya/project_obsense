@@ -3,7 +3,7 @@ import DonutChart from '../../components/charts/DonutChart';
 import TrendLineChart from '../../components/charts/TrendLineChart';
 import CorrelationHeatmap from '../../components/charts/CorrelationHeatmap';
 import FeatureBarChart from '../../components/charts/FeatureBarChart';
-import storageService from '../../mock/storageService';
+import exportToCSV from '../../utils/exportCsv';
 import dashboardService, { EMPTY_STATS } from '../../services/dashboardService';
 import predictionService from '../../services/predictionService';
 import { useNotification } from '../../context/NotificationContext';
@@ -47,7 +47,7 @@ export const ReportsAnalytics = () => {
       { Indikator: 'Random Forest Tuned - Skenario A (Full)', Nilai: `${accFull}%` },
       { Indikator: 'Random Forest Tuned - Skenario B (Lifestyle-Only)', Nilai: `${accLife}%` }
     ];
-    storageService.exportToCSV(summaryData, `obsense_analytics_report_${Date.now()}.csv`);
+    exportToCSV(summaryData, `obsense_analytics_report_${Date.now()}.csv`);
     showSuccess('Laporan analitik berhasil diexport ke CSV!');
   };
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DataTable from '../../components/common/DataTable';
-import storageService from '../../mock/storageService';
+import exportToCSV from '../../utils/exportCsv';
 import cycleService from '../../services/cycleService';
 import userService, { apiErrorMessage } from '../../services/userService';
 import predictionService from '../../services/predictionService';
@@ -64,7 +64,7 @@ export const DataManagement = () => {
   }, []);
 
   const handleExportCSV = () => {
-    storageService.exportToCSV(logs, `obsense_daily_logs_${Date.now()}.csv`);
+    exportToCSV(logs, `obsense_daily_logs_${Date.now()}.csv`);
     showSuccess('Data log harian berhasil diexport ke file CSV!');
   };
 

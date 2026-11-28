@@ -49,7 +49,7 @@ exports.requestOTP = async (req, res) => {
     return res.json({
       message: 'Kode OTP telah dikirim ke email Anda. Kode berlaku selama 10 menit.',
       // Development only - remove in production:
-      devOnly_otp: process.env.NODE_ENV === 'development' ? otpCode : undefined,
+      devOnly_otp: process.env.NODE_ENV !== 'production' ? otpCode : undefined,
       expiresIn: '10 menit',
     });
   } catch (error) {

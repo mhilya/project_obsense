@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '../../components/common/DataTable';
-import storageService from '../../mock/storageService';
+import auditService from '../../services/auditService';
+import { apiErrorMessage } from '../../services/userService';
+import exportToCSV from '../../utils/exportCsv';
 import { useNotification } from '../../context/NotificationContext';
 import {
   FileSpreadsheet,
@@ -10,17 +12,23 @@ import {
 } from 'lucide-react';
 
 export const AuditLogs = () => {
-  const { showSuccess } = useNotification();
+  const { showSuccess, showError } = useNotification();
   const [logs, setLogs] = useState([]);
   const [selectedLog, setSelectedLog] = useState(null);
 
-  const loadLogs = () => {
-    setLogs(storageService.getAuditLogs());
-  };
+  const loadLogs = useCallback(async () => {
+    try {
+      const list = await auditService.getAuditLogs();
+      setLogs(list);
+    } catch (err) {
+      showError('Gagal memuat audit logs: ' + apiErrorMessage(err));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     loadLogs();
-  }, []);
+  }, [loadLogs]);
 
   const handleExportCSV = () => {
     const exportable = logs.map((l) => ({
@@ -33,7 +41,13 @@ export const AuditLogs = () => {
       IP: l.ip_address || '127.0.0.1',
       DetailPerubahan: JSON.stringify(l.details || {})
     }));
-    storageService.exportToCSV(exportable, `obsense_audit_trail_${Date.now()}.csv`);
+    exportToCSV(exportable, `obsense_audit_trail_${Date.now()}.csv`);
+    auditService.record({
+      action: 'EXPORT_DATA',
+      entity_type: 'AuditLog',
+      entity_id: 'ALL',
+      details: { format: 'CSV', record_count: exportable.length }
+    });
     showSuccess('Audit log trail berhasil diexport ke CSV untuk compliance!');
   };
 

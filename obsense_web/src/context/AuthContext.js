@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { STORAGE_KEYS } from '../utils/constants';
-import storageService from '../mock/storageService';
 import api from '../services/api';
+import auditService from '../services/auditService';
 
 export const AuthContext = createContext(null);
 
@@ -13,7 +13,6 @@ export const AuthProvider = ({ children }) => {
   // Inisialisasi auth state: validasi token tersimpan ke auth-service (/auth/me)
   useEffect(() => {
     const savedToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    const savedUser = localStorage.getItem(STORAGE_KEYS.USER);
 
     const clearSession = () => {
       localStorage.removeItem(STORAGE_KEYS.TOKEN);
@@ -36,12 +35,9 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(me));
       })
       .catch(() => {
-        // Token palsu/kedaluwarsa, atau auth-service tidak bisa dihubungi
         clearSession();
       })
       .finally(() => setLoading(false));
-    // savedUser sengaja tidak dipakai: data profil selalu diambil dari server
-    void savedUser;
   }, []);
 
   // Login admin ke auth-service lewat gateway
@@ -56,6 +52,13 @@ export const AuthProvider = ({ children }) => {
       setToken(jwt);
       setUser(admin);
 
+      auditService.record({
+        action: 'LOGIN',
+        entity_type: 'Admin',
+        entity_id: String(admin.id),
+        details: { role: admin.role, status: 'SUCCESS' },
+      });
+
       return { success: true, user: admin };
     } catch (error) {
       const message = error.response
@@ -66,27 +69,15 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     }
   }, []);
-  // Switch role cepat untuk kebutuhan testing demo
-  const switchRole = useCallback((role = 'super_admin') => {
-    const admins = storageService.getAdmins();
-    const target = admins.find((a) => a.role === role) || admins[0];
-    const userToken = `obsense-token-${target.role}-${Date.now()}`;
-
-    localStorage.setItem(STORAGE_KEYS.TOKEN, userToken);
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(target));
-    setToken(userToken);
-    setUser(target);
-  }, []);
 
   // Fungsi Logout
   const logout = useCallback(async () => {
     if (user) {
-      storageService.addAuditLog({
+      await auditService.record({
         action: 'LOGOUT',
         entity_type: 'Admin',
         entity_id: String(user.id),
-        admin_name: user.name,
-        details: { status: 'User logged out' }
+        details: { status: 'User logged out' },
       });
     }
 
@@ -106,7 +97,6 @@ export const AuthProvider = ({ children }) => {
     loading,
     login,
     logout,
-    switchRole
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

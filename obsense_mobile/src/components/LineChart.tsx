@@ -36,8 +36,12 @@ export default function LineChart({ data, compact = false }: LineChartProps) {
 
   // Generate points for the line
   const points = visibleData.map((item, index) => {
-    const x = PADDING + (index / (visibleData.length - 1)) * (CHART_WIDTH - PADDING * 2);
-    const y = CHART_HEIGHT - PADDING - ((item.weight - minWeight) / range) * (CHART_HEIGHT - PADDING * 2);
+    const x =
+      visibleData.length === 1
+        ? CHART_WIDTH / 2
+        : PADDING + (index / (visibleData.length - 1)) * (CHART_WIDTH - PADDING * 2);
+    const y =
+      CHART_HEIGHT - PADDING - ((item.weight - minWeight) / range) * (CHART_HEIGHT - PADDING * 2);
     return { x, y };
   });
 
