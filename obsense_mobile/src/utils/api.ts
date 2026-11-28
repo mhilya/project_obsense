@@ -17,7 +17,7 @@ export const API_BASE_URL = __DEV__
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
-): Promise<{ success: boolean; data?: T; error?: string }> {
+): Promise<{ success: boolean; data?: T; error?: string; statusCode?: number }> {
   try {
     const url = `${API_BASE_URL}${endpoint}`;
     
@@ -35,12 +35,14 @@ export async function apiRequest<T>(
       return {
         success: false,
         error: data.message || `HTTP error! status: ${response.status}`,
+        statusCode: response.status,
       };
     }
 
     return {
       success: true,
       data: data as T,
+      statusCode: response.status,
     };
   } catch (error) {
     console.error('API request error:', error);
@@ -58,7 +60,7 @@ export async function authenticatedRequest<T>(
   endpoint: string,
   token: string,
   options: RequestInit = {}
-): Promise<{ success: boolean; data?: T; error?: string }> {
+): Promise<{ success: boolean; data?: T; error?: string; statusCode?: number }> {
   return apiRequest<T>(endpoint, {
     ...options,
     headers: {

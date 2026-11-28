@@ -3,6 +3,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import AssessmentResultScreen from '../screens/AssessmentResultScreen';
 import BottomTabNavigator from './BottomTabNavigator';
 import { RootStackParamList } from '../types/navigation';
 import { Colors } from '../theme';
@@ -32,8 +34,18 @@ const RootNavigator = (): React.JSX.Element => (
       options={{ headerShown: false }}
     />
     <Stack.Screen
+      name="ForgotPassword"
+      component={ForgotPasswordScreen}
+      options={{ headerShown: false }}
+    />
+    <Stack.Screen
       name="Main"
       component={BottomTabNavigator}
+      options={{ headerShown: false }}
+    />
+    <Stack.Screen
+      name="AssessmentResult"
+      component={AssessmentResultScreen}
       options={{ headerShown: false }}
     />
   </Stack.Navigator>

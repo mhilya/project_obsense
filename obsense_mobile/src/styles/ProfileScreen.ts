@@ -247,6 +247,47 @@ const styles = StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
   },
+  genderContainer: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.base,
+  },
+  genderButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.base,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.backgroundDark,
+    alignItems: 'center',
+  },
+  genderButtonActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  genderButtonText: {
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.semibold,
+  },
+  genderButtonTextActive: {
+    color: Colors.textOnPrimary,
+    fontWeight: FontWeight.bold,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.base,
+    paddingVertical: Spacing.sm,
+  },
+  switchLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+  },
   genderRow: {
     flexDirection: 'row',
     gap: Spacing.sm + 2,

@@ -14,6 +14,26 @@ export interface UserProfile {
 }
 
 /**
+ * Interface untuk profil lengkap dari user-service (Fase 3)
+ * Includes anthropometric data and health information
+ */
+export interface CompleteUserProfile extends UserProfile {
+  phone?: string;
+  gender?: 'Laki-laki' | 'Perempuan' | 'Male' | 'Female'; // Backend accepts both
+  birth_date?: string; // "YYYY-MM-DD"
+  age?: number;
+  height?: number; // cm
+  weight?: number; // kg
+  bmi?: number;
+  obesity_class?: string;
+  risk_level?: string;
+  address?: string;
+  family_history_with_overweight?: boolean;
+  smoke?: boolean;
+  updated_at?: string;
+}
+
+/**
  * Interface untuk data registrasi lengkap (mobile app)
  * Untuk fase 0-2, hanya name, email, password yang dikirim ke auth-service
  * Data lengkap (gender, tanggalLahir, dll) akan ke user-service di Fase 3
@@ -333,6 +353,264 @@ export async function changePassword(
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Change password error' 
+    };
+  }
+}
+
+// ============================================================
+// PASSWORD RESET (FORGOT PASSWORD) WITH OTP
+// ============================================================
+
+/**
+ * Step 1: Request OTP for password reset
+ * POST /auth/forgot-password/request-otp
+ * 
+ * Request: { email, accountType }
+ * Response 200: { message, expiresIn }
+ */
+export async function requestPasswordResetOTP(
+  email: string,
+  accountType: 'user' | 'admin' = 'user'
+): Promise<{
+  success: boolean;
+  error?: string;
+  devOtp?: string; // Only in development
+}> {
+  try {
+    const response = await apiRequest<{ 
+      message: string; 
+      devOnly_otp?: string;
+      expiresIn: string;
+    }>(
+      '/auth/forgot-password/request-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, accountType }),
+      }
+    );
+
+    if (response.success && response.data) {
+      return { 
+        success: true,
+        devOtp: response.data.devOnly_otp, // For development/testing only
+      };
+    }
+
+    return { 
+      success: false, 
+      error: response.error || 'Gagal mengirim OTP' 
+    };
+  } catch (error) {
+    console.error('Error requesting OTP:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Request OTP error' 
+    };
+  }
+}
+
+/**
+ * Step 2: Verify OTP code
+ * POST /auth/forgot-password/verify-otp
+ * 
+ * Request: { email, otpCode, accountType }
+ * Response 200: { message, verified, resetToken }
+ */
+export async function verifyPasswordResetOTP(
+  email: string,
+  otpCode: string,
+  accountType: 'user' | 'admin' = 'user'
+): Promise<{
+  success: boolean;
+  resetToken?: string;
+  error?: string;
+}> {
+  try {
+    const response = await apiRequest<{ 
+      message: string; 
+      verified: boolean;
+      resetToken: string;
+    }>(
+      '/auth/forgot-password/verify-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, otpCode, accountType }),
+      }
+    );
+
+    if (response.success && response.data && response.data.verified) {
+      return { 
+        success: true,
+        resetToken: response.data.resetToken,
+      };
+    }
+
+    return { 
+      success: false, 
+      error: response.error || 'Kode OTP tidak valid' 
+    };
+  } catch (error) {
+    console.error('Error verifying OTP:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Verify OTP error' 
+    };
+  }
+}
+
+/**
+ * Step 3: Reset password with verified OTP
+ * POST /auth/forgot-password/reset-password
+ * 
+ * Request: { email, otpCode, newPassword, accountType }
+ * Response 200: { message }
+ */
+export async function resetPasswordWithOTP(
+  email: string,
+  otpCode: string,
+  newPassword: string,
+  accountType: 'user' | 'admin' = 'user'
+): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const response = await apiRequest<{ message: string }>(
+      '/auth/forgot-password/reset-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, otpCode, newPassword, accountType }),
+      }
+    );
+
+    if (response.success) {
+      return { success: true };
+    }
+
+    return { 
+      success: false, 
+      error: response.error || 'Gagal reset password' 
+    };
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Reset password error' 
+    };
+  }
+}
+
+// ============================================================
+// USER SERVICE API (FASE 3 - Anthropometric Data)
+// ============================================================
+
+/**
+ * Ambil profil lengkap user dari user-service
+ * GET /users/me
+ * 
+ * Response 200: { user: { ...profile, height, weight, bmi, obesity_class, risk_level } }
+ * Response 404: Profile belum dibuat, fallback ke auth-service
+ */
+export async function getUserProfile(): Promise<CompleteUserProfile | null> {
+  try {
+    const token = await getToken();
+    if (!token) {
+      console.warn('No token found, returning cached user');
+      return await getCachedUser();
+    }
+
+    // Try to get complete profile from user-service
+    const response = await authenticatedRequest<{ user: CompleteUserProfile }>(
+      '/users/me',
+      token,
+      { method: 'GET' }
+    );
+
+    if (response.success && response.data) {
+      // Update cache with complete profile
+      await cacheUserProfile(response.data.user);
+      return response.data.user;
+    }
+
+    // If 404 or error, fallback to auth-service (basic profile)
+    console.warn('User profile not found in user-service, falling back to auth-service');
+    const authResponse = await authenticatedRequest<MeResponse>(
+      '/auth/me',
+      token,
+      { method: 'GET' }
+    );
+
+    if (authResponse.success && authResponse.data) {
+      await cacheUserProfile(authResponse.data.user);
+      return authResponse.data.user;
+    }
+
+    // Final fallback to cache
+    return await getCachedUser();
+  } catch (error) {
+    console.error('Error getting user profile:', error);
+    return await getCachedUser();
+  }
+}
+
+/**
+ * Update/create user profile dengan data antropometri
+ * PUT /users/me
+ * 
+ * Request: { name?, email?, phone?, gender?, birth_date?, height?, weight?, address?, family_history_with_overweight?, smoke? }
+ * Response 200/201: { message, user: { ...profile, bmi, obesity_class, risk_level } }
+ */
+export async function updateCompleteUserProfile(
+  updates: Partial<{
+    name: string;
+    email: string;
+    phone: string;
+    gender: string; // "Laki-laki" | "Perempuan"
+    birth_date: string; // "YYYY-MM-DD"
+    height: number; // cm
+    weight: number; // kg
+    address: string;
+    family_history_with_overweight: boolean;
+    smoke: boolean;
+  }>
+): Promise<{
+  success: boolean;
+  user?: CompleteUserProfile;
+  error?: string;
+}> {
+  try {
+    const token = await getToken();
+    if (!token) {
+      return { success: false, error: 'Token tidak ditemukan. Silakan login kembali.' };
+    }
+
+    const response = await authenticatedRequest<{ 
+      message: string; 
+      user: CompleteUserProfile 
+    }>(
+      '/users/me',
+      token,
+      {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      }
+    );
+
+    if (response.success && response.data) {
+      // Update cache with complete profile including BMI calculation
+      await cacheUserProfile(response.data.user);
+      return { success: true, user: response.data.user };
+    }
+
+    return { 
+      success: false, 
+      error: response.error || 'Gagal memperbarui profil' 
+    };
+  } catch (error) {
+    console.error('Error updating complete user profile:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Update error' 
     };
   }
 }
